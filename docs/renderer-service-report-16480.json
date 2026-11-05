@@ -1,0 +1,77 @@
+{
+  "device": {
+    "model": "V2203A",
+    "sdkInt": 35
+  },
+  "start": {
+    "processName": "com.omnifarious.omniagent:browser",
+    "sdkInt": 35,
+    "suffix": "dsh-browser-v1",
+    "suffixApplied": true,
+    "suffixError": "",
+    "suffixDirExists": true,
+    "allowAnonymousEngineAccess": false,
+    "tabCount": 0
+  },
+  "ensureTab": {
+    "ok": true,
+    "tabId": "t1",
+    "reused": false
+  },
+  "surfacePackageDelivered": true,
+  "loadedState": {
+    "tabId": "t1",
+    "url": "http:\/\/127.0.0.1:39899\/",
+    "title": "renderer-test-page",
+    "loadState": "loaded",
+    "reason": "",
+    "generation": 1,
+    "width": 800,
+    "height": 600,
+    "scrollY": 0,
+    "scrollDirection": 0,
+    "canGoBack": false,
+    "canGoForward": false,
+    "blockedRequests": 0,
+    "identityId": "android-real",
+    "uaChApplied": false,
+    "viewportCssWidth": 0,
+    "projectionAttached": true
+  },
+  "r2_lifecycle": "PASS",
+  "negativeControls": {
+    "javascript": "{\"ok\":false,\"reason\":\"unsupported-url\"}",
+    "protectedEnginePort": "{\"ok\":false,\"reason\":\"unsupported-url\"}"
+  },
+  "r3_policy": "PASS",
+  "jsTitle": "\"renderer-test-page\"",
+  "taps": {
+    "before": 0,
+    "after": 1
+  },
+  "r4_primitives": "PASS",
+  "pngBytes": 8433,
+  "r4_capture": "PASS",
+  "resizedState": {
+    "tabId": "t1",
+    "url": "http:\/\/127.0.0.1:39899\/",
+    "title": "renderer-test-page",
+    "loadState": "loaded",
+    "reason": "",
+    "generation": 1,
+    "width": 1200,
+    "height": 820,
+    "scrollY": 0,
+    "scrollDirection": 0,
+    "canGoBack": false,
+    "canGoForward": false,
+    "blockedRequests": 0,
+    "identityId": "android-real",
+    "uaChApplied": false,
+    "viewportCssWidth": 0,
+    "projectionAttached": true
+  },
+  "r2_relayout": "PASS",
+  "r5_teardown": "PASS",
+  "finishedAt": 1792818845063
+}

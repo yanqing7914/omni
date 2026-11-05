@@ -1,0 +1,67 @@
+{
+  "device": {
+    "model": "V2203A",
+    "sdkInt": 35,
+    "abis": "x86_64,arm64-v8a,x86"
+  },
+  "spikeProcess": {
+    "processName": "com.omnifarious.omniagent:browser_spike",
+    "packageName": "com.omnifarious.omniagent",
+    "sdkInt": 35,
+    "suffix": "dsh-spike-v1",
+    "suffixApplied": true,
+    "suffixError": "",
+    "webviewDataDir": "\/data\/user\/0\/com.omnifarious.omniagent",
+    "suffixDirExists": true
+  },
+  "spikeCookieJar": "dsh_spike=1",
+  "mainCookieJar": "dsh_main=1",
+  "suffixDirExistsAfterCookie": true,
+  "s1_cookie_isolation": "PASS",
+  "s2_first_state": {
+    "created": true,
+    "loaded": true,
+    "loadError": "",
+    "buildError": "",
+    "viewTapCount": 0,
+    "jsTapCount": 0,
+    "width": 800,
+    "height": 600
+  },
+  "s2_resized_state": {
+    "created": true,
+    "loaded": true,
+    "loadError": "",
+    "buildError": "",
+    "viewTapCount": 0,
+    "jsTapCount": 0,
+    "width": 1200,
+    "height": 820
+  },
+  "s2_scvh_projection": "PASS",
+  "surfaceRect": {
+    "l": 0,
+    "t": 36,
+    "r": 1600,
+    "b": 900
+  },
+  "s3_host_touch_before_after": {
+    "before": 0,
+    "after": 1
+  },
+  "s3_native_input_forwarded": false,
+  "s3_after_manual_input": {
+    "created": true,
+    "loaded": true,
+    "loadError": "",
+    "buildError": "",
+    "viewTapCount": 2,
+    "jsTapCount": 1,
+    "width": 1200,
+    "height": 820
+  },
+  "s3_input_forwarding": "PASS",
+  "s4_alive_after_background": true,
+  "s4_background_lifetime": "PASS",
+  "finishedAt": 1792815564477
+}

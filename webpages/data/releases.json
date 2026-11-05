@@ -1,0 +1,61 @@
+{
+  "tag": "v0.14.10",
+  "publishedAt": "2026-10-28T22:35:24Z",
+  "source": "release",
+  "generatedAt": "2026-11-03T17:00:05.010Z",
+  "assets": [
+    {
+      "name": "dsh-android-dsh-client-ui-responsive-0.3.3.tgz",
+      "size": 336152
+    },
+    {
+      "name": "dsh-android-dsh-host-web-compat-0.1.16.tgz",
+      "size": 43203
+    },
+    {
+      "name": "dsh-android-dsh-shell-termux-0.2.0.tgz",
+      "size": 9526
+    },
+    {
+      "name": "omni-v0.14.10-arm64.apk",
+      "size": 163401646
+    },
+    {
+      "name": "omni-v0.14.10-x86_64.apk",
+      "size": 159367836
+    },
+    {
+      "name": "MANIFEST.txt",
+      "size": 1389
+    },
+    {
+      "name": "notes.md",
+      "size": 33519
+    },
+    {
+      "name": "plugin-lock-resolution-arm64.json",
+      "size": 949
+    },
+    {
+      "name": "plugin-lock-resolution-release.json",
+      "size": 4196
+    },
+    {
+      "name": "plugin-lock-resolution-x86_64.json",
+      "size": 949
+    },
+    {
+      "name": "snapshot-arm64.tar.xz",
+      "size": 157948528
+    },
+    {
+      "name": "snapshot-x86_64.tar.xz",
+      "size": 153914720
+    }
+  ],
+  "sha256": {
+    "arm64": "bbf290064b8d56a60af302cfcc56238d952393a670de2c18b6e6a096ba569b72",
+    "x86_64": "1ce20a9b32e8cd7a80187945adb94e5c98013e0ca4b3ba8935d9a6c6af09e42c"
+  },
+  "manifestSha256": "494b16b10d68c7d3aaa6086f77a0a6c252a4af6763758eef5563f9f9aa942231"
+}

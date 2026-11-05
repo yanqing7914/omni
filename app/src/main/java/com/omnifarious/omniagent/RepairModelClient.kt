@@ -1,0 +1,504 @@
+package com.omnifarious.omniagent
+
+import java.io.ByteArrayOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicReference
+import org.json.JSONArray
+import org.json.JSONObject
+
+/** One bounded model request. It never opens a browser, Node process, or engine dependency. */
+internal class RepairModelClient {
+  /** anthropic 分支的 token 常量（issue #1015；详见 [anthropicTokenPlan]）。 */
+  internal companion object {
+    /** 不留思考预算时（effort=off/null）的回复上限。与原硬写值一致，保持既有行为不变。 */
+    const val ANTHROPIC_MAX_TOKENS_DEFAULT = 8192
+
+    /** 思考预算之外留给正式回答的空间：只留 budget+1 会让回答被截断。 */
+    const val ANTHROPIC_OUTPUT_HEADROOM = 8192
+
+    /** 回复上限的天花板：防止高档位把 max_tokens 推到端点拒绝的数值。 */
+    const val ANTHROPIC_MAX_TOKENS_CEILING = 32768
+  }
+
+  private val active = AtomicReference<HttpURLConnection?>(null)
+  @Volatile internal var lastOutboundDigest: String = ""
+    private set
+  @Volatile internal var lastOutboundMessages: Int = 0
+    private set
+  fun cancel() { active.getAndSet(null)?.disconnect() }
+
+  fun complete(
+    connection: RepairModelConnection,
+    messages: JSONArray,
+    tools: JSONArray,
+    reasoningEffort: String? = connection.defaultReasoningEffort,
+  ): JSONObject {
+    require(connection.apiKey.isNotBlank()) { "模型凭据不在内存中；请重新打开修复助手" }
+    val endpoint = endpointFor(connection)
+    val effort = reasoningEffort?.takeIf { id -> connection.reasoningEfforts.any { it.id == id } }
+    val projected = RepairToolCallParser.outboundHistory(messages)
+    if (connection.toolHistoryMode == "user-observation") {
+      // This is an explicit compatibility override for a gateway that cannot
+      // accept provider-native tool roles. It groups one completed batch into a
+      // single stable observation; ordinary compatible routes keep the native
+      // sequence and the provider-cache prefix unchanged.
+      val observation = RepairToolCallParser.toolResultsAsUserObservations(projected)
+      for (i in projected.length() - 1 downTo 0) projected.remove(i)
+      for (i in 0 until observation.length()) projected.put(observation.getJSONObject(i))
+    }
+    val outbound = projected
+    val outboundBytes = outbound.toString().toByteArray(StandardCharsets.UTF_8)
+    lastOutboundDigest = MessageDigest.getInstance("SHA-256").digest(outboundBytes)
+      .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+    lastOutboundMessages = outbound.length()
+    val body = when (connection.api) {
+      "anthropic-messages" -> anthropicBody(connection, outbound, tools, effort)
+      "openai-responses" -> responsesBody(connection, outbound, tools, effort)
+      else -> completionsBody(connection, outbound, tools, effort)
+    }
+    val response = postWithOneTransientRetry(connection, endpoint, body)
+    gatewayErrorOf(response, connection.apiKey)?.let { throw RepairModelFailure(it) }
+    val parsed = JSONObject(response)
+    val result = when (connection.api) {
+      "anthropic-messages" -> anthropicResult(parsed)
+      "openai-responses" -> responsesResult(parsed)
+      else -> completionsResult(parsed)
+    }
+    return RepairToolCallParser.normalize(result)
+  }
+
+  internal fun endpointFor(connection: RepairModelConnection): String {
+    val base = normalizeModelBase(connection.baseUrl)
+    require(base != null) { "模型端点必须是 http(s) 地址，且不得内嵌账号密码" }
+    val suffix = when (connection.api) {
+      "anthropic-messages" -> if (base.substringBefore('?').endsWith("/v1")) "/messages" else "/v1/messages"
+      "openai-responses" -> "/responses"
+      else -> "/chat/completions"
+    }
+    return appendEndpointPath(base, suffix)
+  }
+
+  /**
+   * 把请求路径拼到 base 上，且**把 base 自带的查询串留在最末**。
+   *
+   * 自部署网关常用 `http://host:8000/v1?token=…` 这种形态；直接 `base + "/chat/completions"`
+   * 会拼出 `…?token=…/chat/completions`（查询串把路径吃进去），请求必然打错地方。
+   * 这里先切出 path 再拼，最后接回原查询串与片段。
+   *
+   * @param base 已规范化的基址（可含查询串与片段）。
+   * @param suffix 要追加的路径，必须以 `/` 开头。
+   * @returns 可直接请求的完整端点。
+   */
+  internal fun appendEndpointPath(base: String, suffix: String): String {
+    val hash = base.indexOf('#')
+    val head = if (hash >= 0) base.substring(0, hash) else base
+    val tail = if (hash >= 0) base.substring(hash) else ""
+    val query = head.indexOf('?')
+    return if (query < 0) head + suffix + tail
+    else head.substring(0, query) + suffix + head.substring(query) + tail
+  }
+
+  /**
+   * 抹掉文本里任何 URL 的查询串。
+   *
+   * 放宽到明文 HTTP 之后，端点可能长成 `http://host:8000/v1?token=…`：底层异常消息会把整条 URL
+   * 带出来，而修复助手的失败文案会进聊天记录、`repair-model-source.json` 与共享诊断包。
+   * 查询串里恰恰是自部署网关最常见的放 key 位置，所以**一律不保留查询串内容**，只留路径。
+   *
+   * 凭据（userinfo）在准入层已被拒绝，不会出现在 URL 里；这里只处理查询串与片段。
+   *
+   * @param text 可能含 URL 的任意文本（通常是异常消息）。
+   * @returns 查询串被替换为 `?<redacted>` 的文本。
+   */
+  internal fun redactUrlQuery(text: String): String {
+    val withoutQuery = Regex("(https?://[^\\s?#]+)\\?[^\\s#]*").replace(text) { it.groupValues[1] + "?<redacted>" }
+    return Regex("(https?://[^\\s#]+)#[^\\s]*").replace(withoutQuery) { it.groupValues[1] + "#<redacted>" }
+  }
+
+  /**
+   * 模型端点准入与规范化。
+   *
+   * 用户 2026-11-01 明确要求：**允许本地地址与明文 HTTP**（自部署模型很常见）。旧实现只放行
+   * `https://` 与两个回环字面量，于是自建网关（`http://192.168.x.x:8000/v1`、内网域名、
+   * `http://host:8000/v1`）在修复助手里一律被判「端点不合法」——引擎那边能用的配置，助手用不了。
+   *
+   * 取舍是显式的：明文 HTTP 的代价（同网段可被动嗅探/篡改凭据与内容）由用户自担，平台侧
+   * `network_security_config` 的 base-config 早已 `cleartextTrafficPermitted="true"`（见该文件
+   * 0.14.1 注释），所以这里是「准入面与平台面重新对齐」，不是新开一个口子。
+   *
+   * 仍然拒绝三类：非 http(s) scheme（file/javascript/data 等）、空 host、URL 里内嵌
+   * `user:pass@`（凭据会随请求发到第三方日志里）。
+   *
+   * @param raw 配置里的 baseURL 原文。
+   * @returns 去掉末尾斜杠、保留显式端口与路径前缀（含 IPv6 方括号）的基址；不合法返回 null。
+   */
+  internal fun normalizeModelBase(raw: String): String? {
+    val text = raw.trim()
+    if (text.isEmpty()) return null
+    val lower = text.lowercase()
+    val scheme = when {
+      lower.startsWith("https://") -> "https://"
+      lower.startsWith("http://") -> "http://"
+      else -> return null
+    }
+    val rest = text.substring(scheme.length)
+    // user:pass@host 形态：凭据会被写进 Authorization 之外的 URL，可能落到对端日志与重定向里。
+    val authority = rest.substringBefore('/').substringBefore('?').substringBefore('#')
+    if (authority.contains('@')) return null
+    val host = when {
+      authority.startsWith("[") -> {
+        val close = authority.indexOf(']')
+        if (close <= 1) return null
+        authority.substring(0, close + 1)
+      }
+      else -> authority.substringBefore(':')
+    }
+    if (host.isEmpty() || host == "[]") return null
+    // 保留显式端口、路径前缀与 IPv6 方括号，只收敛末尾斜杠。
+    return (scheme + rest).trimEnd('/')
+  }
+
+
+  private fun completionsBody(
+    connection: RepairModelConnection,
+    messages: JSONArray,
+    tools: JSONArray,
+    effort: String?,
+  ): String {
+    // OpenAI-compatible chat endpoints require every tool to be wrapped in a
+    // `{type:function, function:{...}}` envelope. Sending the bare Anthropic-like
+    // schema let some gateways accept the request but silently ignore the tools,
+    // which made the model print DSML markup into assistant content instead.
+    // An explicitly configured route may project observations before this point.
+    val body = JSONObject().put("model", connection.model).put("messages", messages)
+      .put("tools", RepairToolCallParser.openAiTools(tools))
+      .put("tool_choice", "auto").put("stream", false)
+    applyReasoning(connection, body, effort)
+    body.put(connection.maxTokensField ?: "max_tokens", 8192)
+    return body.toString()
+  }
+
+  private fun responsesBody(
+    connection: RepairModelConnection,
+    messages: JSONArray,
+    tools: JSONArray,
+    effort: String?,
+  ): String {
+    val input = JSONArray()
+    val mappedTools = JSONArray()
+    var system = ""
+    for (i in 0 until messages.length()) {
+      val m = messages.getJSONObject(i)
+      when (m.optString("role")) {
+        "system" -> system += m.optString("content") + "\n"
+        "tool" -> input.put(JSONObject().put("type", "function_call_output").put("call_id", m.optString("tool_call_id")).put("output", m.optString("content")))
+        else -> {
+          val content = m.optString("content")
+          if (content.isNotBlank()) input.put(JSONObject().put("role", m.optString("role")).put("content", content))
+          val calls = m.optJSONArray("tool_calls") ?: continue
+          for (j in 0 until calls.length()) {
+            val call = calls.getJSONObject(j); val fn = call.getJSONObject("function")
+            input.put(JSONObject().put("type", "function_call").put("call_id", call.getString("id"))
+              .put("name", fn.getString("name")).put("arguments", fn.optString("arguments", "{}")))
+          }
+        }
+      }
+    }
+    for (i in 0 until tools.length()) {
+      val tool = tools.getJSONObject(i)
+      mappedTools.put(JSONObject().put("type", "function").put("name", tool.getString("name"))
+        .put("description", tool.optString("description")).put("parameters", tool.optJSONObject("parameters")))
+    }
+    val body = JSONObject().put("model", connection.model).put("input", input).put("tools", mappedTools)
+      .put("instructions", system).put("store", false)
+    if (effort != null && effort != "off") {
+      body.put("reasoning", JSONObject().put("effort", effort))
+    }
+    return body.toString()
+  }
+
+  private fun anthropicBody(
+    connection: RepairModelConnection,
+    messages: JSONArray,
+    tools: JSONArray,
+    effort: String?,
+  ): String {
+    val system = StringBuilder(); val converted = JSONArray()
+    for (i in 0 until messages.length()) {
+      val m = messages.getJSONObject(i)
+      when (m.optString("role")) {
+        "system" -> system.append(m.optString("content")).append("\n")
+        "tool" -> converted.put(JSONObject().put("role", "user").put("content", JSONArray().put(
+          JSONObject().put("type", "tool_result").put("tool_use_id", m.optString("tool_call_id"))
+            .put("content", m.optString("content")))))
+        "assistant" -> {
+          val contents = JSONArray()
+          m.optString("reasoning_content").takeIf { it.isNotBlank() }?.let {
+            contents.put(JSONObject().put("type", "thinking").put("thinking", it))
+          }
+          m.optString("content").takeIf { it.isNotBlank() && it != "null" }?.let {
+            contents.put(JSONObject().put("type", "text").put("text", it))
+          }
+          val calls = m.optJSONArray("tool_calls") ?: JSONArray()
+          for (j in 0 until calls.length()) {
+            val call = calls.getJSONObject(j); val fn = call.getJSONObject("function")
+            val input = runCatching { JSONObject(fn.optString("arguments", "{}")) }.getOrDefault(JSONObject())
+            contents.put(JSONObject().put("type", "tool_use").put("id", call.getString("id"))
+              .put("name", fn.getString("name")).put("input", input))
+          }
+          converted.put(JSONObject().put("role", "assistant").put("content", contents))
+        }
+        else -> converted.put(JSONObject().put("role", "user").put("content", m.optString("content")))
+      }
+    }
+    val anthTools = JSONArray()
+    for (i in 0 until tools.length()) {
+      val t = tools.getJSONObject(i)
+      anthTools.put(JSONObject().put("name", t.getString("name")).put("description", t.optString("description"))
+        .put("input_schema", t.optJSONObject("parameters")))
+    }
+    // issue #1015：max_tokens 与 budget_tokens 必须是**同一个约束下的两个值**，不能各写一张表。
+    // Anthropic 协议要求 budget_tokens **严格小于** max_tokens；旧实现把 max_tokens 硬写成 8192，
+    // 而 effortBudget 的 high=8192 / xhigh,max=16384 ⇒ 这三档必然违规，端点回 400。
+    // 现在由 anthropicTokenPlan() 一处决定二者，从结构上消除「两张表互相不知道」的可能。
+    val plan = anthropicTokenPlan(effort)
+    val body = JSONObject().put("model", connection.model).put("max_tokens", plan.maxTokens)
+      .put("messages", converted).put("tools", anthTools)
+    if (system.isNotBlank()) body.put("system", system.toString())
+    if (plan.budgetTokens != null) {
+      body.put("thinking", JSONObject().put("type", "enabled").put("budget_tokens", plan.budgetTokens))
+    }
+    return body.toString()
+  }
+
+  private fun applyReasoning(connection: RepairModelConnection, body: JSONObject, effort: String?) {
+    if (effort == null) return
+    val mapped = connection.reasoningEfforts.firstOrNull { it.id == effort }?.wireValue
+    when (connection.thinkingFormat) {
+      "deepseek" -> {
+        body.put("thinking", JSONObject().put("type", if (effort == "off") "disabled" else "enabled"))
+        if (effort != "off" && connection.supportsReasoningEffort == true) {
+          body.put("reasoning_effort", mapped ?: effort)
+        }
+      }
+      "qwen" -> {
+        body.put("enable_thinking", effort != "off")
+        if (effort != "off" && connection.supportsReasoningEffort == true) {
+          body.put("reasoning_effort", mapped ?: effort)
+        }
+      }
+      "openrouter" -> if (effort != "off") {
+        body.put("reasoning", JSONObject().put("effort", mapped ?: effort))
+      }
+      "string-thinking" -> body.put("thinking", if (effort == "off") "none" else mapped ?: effort)
+      "mimo" -> body.put("thinking", JSONObject().put("type", if (effort == "off") "disabled" else "enabled"))
+      else -> if (effort != "off" && connection.supportsReasoningEffort != false) {
+        body.put("reasoning_effort", mapped ?: effort)
+      }
+    }
+  }
+
+  /**
+   * anthropic 分支要发的两个 token 参数（issue #1015）。
+   *
+   * [maxTokens] 是回复上限，[budgetTokens] 是思考预算；**不变量：budgetTokens 恒小于 maxTokens**。
+   * null 表示本档不启用思考（effort 为 null / "off"）。
+   */
+  internal data class AnthropicTokenPlan(val maxTokens: Int, val budgetTokens: Int?)
+
+  /**
+   * 由推理档位算出「合法的」max_tokens + budget_tokens（issue #1015）。
+   *
+   * 缺陷现场：旧实现把 max_tokens 硬写成 8192，而思考预算另有一张 fixed 表
+   * （high=8192、xhigh/max=16384），两张表互不知道对方 ⇒ high 档 budget==max、
+   * xhigh/max 档 budget>max，二者都违反 Anthropic「budget_tokens 必须严格小于 max_tokens」，
+   * 端点直接回 400。而真实配置把 reasoningEffort 默认 pin 成 max，所以打开助手即中招。
+   *
+   * 修法不是「把 8192 调大」——那只是把冲突推给下一个更高的档位。这里改成**单一真源**：
+   * 先按档位定思考预算，再由「预算 + 预留输出」推出 max_tokens，二者永远满足约束。
+   * `ANTHROPIC_OUTPUT_HEADROOM` 是留给正式回答的空间：思考用完预算后还要输出结果，
+   * 只把 max_tokens 设成 budget+1 会让回复被截断。
+   *
+   * @return maxTokens 恒 > budgetTokens（有预算时）；无预算时 budgetTokens 为 null。
+   */
+  internal fun anthropicTokenPlan(effort: String?): AnthropicTokenPlan {
+    if (effort == null || effort == "off") {
+      return AnthropicTokenPlan(maxTokens = ANTHROPIC_MAX_TOKENS_DEFAULT, budgetTokens = null)
+    }
+    val budget = effortBudget(effort)
+    val max = (budget + ANTHROPIC_OUTPUT_HEADROOM).coerceAtMost(ANTHROPIC_MAX_TOKENS_CEILING)
+    // 上限夹紧后仍必须满足「严格小于」：极高档位撞到 ceiling 时把预算压回 max-1。
+    val safeBudget = if (budget < max) budget else (max - 1).coerceAtLeast(1)
+    return AnthropicTokenPlan(maxTokens = max, budgetTokens = safeBudget)
+  }
+
+  /** 档位 -> 思考预算。这是**唯一**的档位表；max_tokens 由它派生（见 anthropicTokenPlan）。 */
+  private fun effortBudget(effort: String): Int = when (effort.lowercase()) {
+    "low" -> 2048
+    "medium" -> 4096
+    "high" -> 8192
+    "xhigh", "max" -> 16384
+    else -> 4096
+  }
+
+  /**
+   * 网关错误的结构化判定（2026-10-25 审计 M-R3/M-R4）。null = 不是接口错误。
+   *
+   * - **结构化**而非文本启发：顶层 `error` 键必须是 JSON 对象才算——自建网关常见的
+   *   `{"choices":[...], "error": null}` 或模型正文含 "error" 字样不再被误判（旧实现用
+   *   `contains("\"error\"")`，正常纯文本回答会被当成接口错误）。
+   * - `error.message` 为 null / JSONObject.NULL 时不算错误：`optString` 会把 null 产出成
+   *   `"null"` 字符串，旧实现即误抛「模型接口错误：null」并丢弃正常回答。
+   * - 回显消息与 [post] 的 HTTP 错误路径同口径替换 apiKey，防网关错误回显凭据。
+   *   例外（2026-10-28 扫描 M4）：apiKey 为空串时字面 `replace("")` 会在每个字符间插 `***`，
+   *   把消息毁成乱码——没有可脱敏的凭据就原样放行（空凭据本就发不出有效请求）。
+   */
+  internal fun gatewayErrorOf(response: String, apiKey: String): String? {
+    val errorObject = runCatching { JSONObject(response).optJSONObject("error") }.getOrNull() ?: return null
+    if (response.contains("\"tool_calls\"")) return null
+    val message = (errorObject.opt("message") as? String)?.takeIf { it.isNotBlank() } ?: return null
+    val redacted = if (apiKey.isEmpty()) message else message.replace(apiKey, "***")
+    return "模型接口错误：" + redacted.take(300)
+  }
+
+  private fun post(connection: RepairModelConnection, endpoint: String, body: String): String {
+    val conn = URL(endpoint).openConnection() as HttpURLConnection
+    active.set(conn)
+    try {
+      conn.requestMethod = "POST"
+      conn.connectTimeout = 20_000
+      conn.readTimeout = 180_000
+      conn.instanceFollowRedirects = false
+      conn.doOutput = true
+      conn.setRequestProperty("Content-Type", "application/json")
+      conn.setRequestProperty("Accept", "application/json")
+      for ((key, value) in connection.headers) {
+        if (key.equals("Host", true) || key.equals("Content-Length", true)) continue
+        conn.setRequestProperty(key, value)
+      }
+      if (connection.api == "anthropic-messages") {
+        conn.setRequestProperty("x-api-key", connection.apiKey)
+        conn.setRequestProperty("anthropic-version", connection.headers["anthropic-version"] ?: "2023-06-01")
+      } else {
+        conn.setRequestProperty("Authorization", "Bearer " + connection.apiKey)
+      }
+      conn.outputStream.use { it.write(body.toByteArray(StandardCharsets.UTF_8)) }
+      val code = conn.responseCode
+      val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+      val bytes = stream?.use { input ->
+        val out = ByteArrayOutputStream(); val buffer = ByteArray(8192)
+        var total = 0
+        while (true) {
+          val n = input.read(buffer); if (n < 0) break
+          total += n
+          if (total > 2_000_000) throw RepairModelFailure("模型响应过大")
+          out.write(buffer, 0, n)
+        }
+        out.toByteArray()
+      } ?: ByteArray(0)
+      val text = bytes.toString(StandardCharsets.UTF_8)
+      if (code in 300..399) {
+        throw RepairModelFailure("模型端点返回重定向（HTTP $code）；为避免凭据发送到其它域，已拒绝跟随")
+      }
+      if (code !in 200..299) throw RepairModelFailure("模型请求失败（HTTP $code）：" + text.replace(connection.apiKey, "***").take(300))
+      if (text.isBlank()) throw RepairModelFailure("模型返回空响应")
+      return text
+    } catch (e: RepairModelFailure) { throw e }
+    // 异常消息常带完整 URL：查询串必须抹掉再进文案（见 redactUrlQuery）。
+    catch (e: Exception) { throw RepairModelFailure("模型连接失败：" + redactUrlQuery(e.message ?: e.javaClass.simpleName)) }
+    finally {
+      active.compareAndSet(conn, null)
+      conn.disconnect()
+    }
+  }
+
+  /**
+   * A dropped keep-alive socket can fail before the server accepts the body.
+   * Retry one idempotent, byte-identical model request; protocol errors and
+   * HTTP responses are never retried because they already carry a diagnosis.
+   */
+  internal fun postWithOneTransientRetry(
+    connection: RepairModelConnection,
+    endpoint: String,
+    body: String,
+  ): String {
+    try {
+      return post(connection, endpoint, body)
+    } catch (failure: RepairModelFailure) {
+      if (!isTransientTransportFailure(failure.message.orEmpty())) throw failure
+    }
+    return post(connection, endpoint, body)
+  }
+
+  internal fun isTransientTransportFailure(message: String): Boolean {
+    if (!message.startsWith("模型连接失败：")) return false
+    val detail = message.lowercase()
+    return listOf(
+      "socket closed", "connection reset", "broken pipe", "unexpected end of stream",
+      "connection refused", "connection aborted", "eof", "timed out", "timeout",
+    ).any { detail.contains(it) }
+  }
+
+  private fun completionsResult(root: JSONObject): JSONObject {
+    val choice = root.optJSONArray("choices")?.optJSONObject(0)
+      ?: throw RepairModelFailure("模型响应缺少 choices")
+    val message = choice.optJSONObject("message") ?: throw RepairModelFailure("模型响应缺少 message")
+    val reasoning = listOf("reasoning_content", "reasoning", "reasoning_text")
+      .firstNotNullOfOrNull { field -> message.optString(field).takeIf { it.isNotBlank() } }
+    if (reasoning != null && message.optString("reasoning_content").isBlank()) {
+      message.put("reasoning_content", reasoning)
+    }
+    return message
+  }
+
+  private fun responsesResult(root: JSONObject): JSONObject {
+    val output = root.optJSONArray("output") ?: JSONArray(); val calls = JSONArray()
+    val text = StringBuilder(); val reasoning = StringBuilder()
+    for (i in 0 until output.length()) {
+      val item = output.getJSONObject(i)
+      when (item.optString("type")) {
+        "message" -> {
+          val content = item.optJSONArray("content") ?: JSONArray()
+          for (j in 0 until content.length()) text.append(content.getJSONObject(j).optString("text"))
+        }
+        "function_call" -> calls.put(JSONObject().put("id", item.optString("call_id"))
+          .put("type", "function").put("function", JSONObject().put("name", item.optString("name"))
+            .put("arguments", item.optString("arguments", "{}"))))
+        "reasoning" -> {
+          val summary = item.optJSONArray("summary")
+          if (summary != null) for (j in 0 until summary.length()) {
+            reasoning.append(summary.getJSONObject(j).optString("text"))
+          }
+          val content = item.optJSONArray("content")
+          if (content != null) for (j in 0 until content.length()) {
+            reasoning.append(content.getJSONObject(j).optString("text"))
+          }
+        }
+      }
+    }
+    return JSONObject().put("role", "assistant").put("content", text.toString())
+      .put("tool_calls", calls).put("reasoning_content", reasoning.toString())
+  }
+
+  private fun anthropicResult(root: JSONObject): JSONObject {
+    val content = root.optJSONArray("content") ?: JSONArray(); val calls = JSONArray()
+    val text = StringBuilder(); val reasoning = StringBuilder()
+    for (i in 0 until content.length()) {
+      val item = content.getJSONObject(i)
+      when (item.optString("type")) {
+        "text" -> text.append(item.optString("text"))
+        "thinking" -> reasoning.append(item.optString("thinking"))
+        "tool_use" -> calls.put(JSONObject().put("id", item.optString("id")).put("type", "function")
+          .put("function", JSONObject().put("name", item.optString("name"))
+            .put("arguments", item.optJSONObject("input")?.toString() ?: "{}")))
+      }
+    }
+    return JSONObject().put("role", "assistant").put("content", text.toString())
+      .put("tool_calls", calls).put("reasoning_content", reasoning.toString())
+  }
+}
+
+internal class RepairModelFailure(message: String) : Exception(message)
