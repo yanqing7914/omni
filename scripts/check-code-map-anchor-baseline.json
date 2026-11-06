@@ -84,7 +84,7 @@
     "EngineStartFlow.kt:497": 1,
     "app/src/main/java/com/omnifarious/omniagent/SnapshotExtractor.kt:81": 1,
     "AndroidBridge.kt:431": 2,
-    "app/build.gradle.kts:175": 2,
+    "app/build.gradle.kts:197": 2,
     "BrowserHostNavigationPolicyTest.kt:129": 2,
     "ControlAudit.kt:34": 2,
     "ControlProtocolV2.kt:196": 2,
@@ -181,7 +181,7 @@
     "NotifyCenter.kt:829": 3,
     "NotifyStore.kt:18": 3,
     "NotifyCenter.kt:631": 3,
-    "app/build.gradle.kts:93": 1,
+    "app/build.gradle.kts:115": 1,
     "app/src/test/java/com/omnifarious/omniagent/CallSiteContractTest.kt:294": 2,
     "app/src/test/java/com/omnifarious/omniagent/OverlayHaloInvariantTest.kt:92": 2,
     "app/src/test/java/com/omnifarious/omniagent/NotifyCenterChannelTest.kt:33": 2,
@@ -404,7 +404,7 @@
     "app/src/main/java/com/omnifarious/omniagent/UndoGate.kt:278": 1,
     "app/src/main/java/com/omnifarious/omniagent/UndoGate.kt:136": 1,
     "scripts/check-bridge-symmetry.mjs:1": 1,
-    "app/build.gradle.kts:176": 1,
+    "app/build.gradle.kts:198": 1,
     "app/src/main/java/com/omnifarious/omniagent/ControlPoller.kt:158": 2,
     "app/src/main/java/com/omnifarious/omniagent/DeviceControlService.kt:652": 2,
     "app/src/main/java/com/omnifarious/omniagent/DeviceControlService.kt:770": 1,
@@ -461,7 +461,7 @@
     "scripts/profile-web.cordis.patch.yml:7": 1,
     "scripts/plugin-dirs.json:1": 1,
     "scripts/check-patch-mirror.mjs:109": 1,
-    ".github/workflows/build-apk-source.yml:134": 1,
+    ".github/workflows/build-apk-source.yml:141": 1,
     "scripts/source-build/reconcile-engine-patch-copies.mjs:58": 1,
     "scripts/source-build/check-dsh-source-snapshot.mjs:25": 1,
     "scripts/check-release-gates.mjs:167": 1,
@@ -1046,7 +1046,7 @@
     "S01 -> 门禁脚本 | 注入类缺陷三条防线之二由 smoke-injections.mjs 与 boot-watchdog.test.mjs 常驻，脚本与源码脱同步即整条红"
   ],
   "sourceLines": {
-    ".github/workflows/build-apk-source.yml:134": [
+    ".github/workflows/build-apk-source.yml:141": [
       "if [ ! -d .deploy-tmp/deepseek-harness/.git ]; then"
     ],
     "0.13.7-CERTIFICATION.md:11": [
@@ -1916,13 +1916,13 @@
     "WebUiChrome.kt:37": [
       "* 定案靠设备层 A/B。本仓实测（Medium_Phone 1080x2400 / 420dpi / 手势条）：改前导航条 inset"
     ],
-    "app/build.gradle.kts:175": [
+    "app/build.gradle.kts:197": [
       "androidTestImplementation(\"androidx.test.ext:junit:1.2.1\")"
     ],
-    "app/build.gradle.kts:176": [
+    "app/build.gradle.kts:198": [
       "androidTestImplementation(\"androidx.test:runner:1.6.2\")"
     ],
-    "app/build.gradle.kts:93": [
+    "app/build.gradle.kts:115": [
       "jvmTarget = \"17\""
     ],
     "app/src/main/AndroidManifest.xml:158": [

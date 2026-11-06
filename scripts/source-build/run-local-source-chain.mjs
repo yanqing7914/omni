@@ -50,7 +50,7 @@ const STAGES = [
   // ——归到 termux 阶段，`--from termux` 才不会再把它跳过（曾因此报「Termux 签名密钥不在场」）。
   { key: 'termux', label: '组装并验签 Termux 基座', match: /^Authenticate official Termux bootstrap|^Add Node\.js to the clean Termux base|^Verify signed Termux repository|^Cross-compile node-pty|^Assemble clean Termux base/ },
   { key: 'snapshot', label: '构建运行时快照', match: /^Build runtime snapshot/ },
-  { key: 'sign', label: 'keystore 自检', match: /^Verify the repository debug signing keystore/ },
+  { key: 'sign', label: 'keystore 自检', match: /^Verify the release signing keystore/ },
   { key: 'apk', label: '门禁 + 注入 + 打包 ARM64 APK', match: /^Build ARM64 APK/ },
 ]
 const SKIP_STEP = /^(Set up job|Checkout project source|Prepare build tools|Run actions\/setup-|Install archive and signature tools|Upload APK and provenance|Post )/

@@ -156,6 +156,10 @@ jobs:
     env:
       DSH_APK_DIR: ${{ github.workspace }}
       ANDROID_USER_HOME: ${{ github.workspace }}/.android-home
+      # 正式发布密钥（GitHub Secrets）；restore-release-key.sh 还原后导出 OMNI_RELEASE_KEYSTORE 路径。
+      OMNI_RELEASE_KEYSTORE_BASE64: ${{ secrets.OMNI_RELEASE_KEYSTORE_BASE64 }}
+      OMNI_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.OMNI_RELEASE_KEYSTORE_PASSWORD }}
+      OMNI_RELEASE_KEY_ALIAS: ${{ secrets.OMNI_RELEASE_KEY_ALIAS }}
     steps:
       # LFS 流量治理（0.14.5）：本 job **完全不需要** LFS 底座。
       #   取证：scripts/build-apk-013.ps1:252 只消费 `.deploy-tmp/snapshot-013/<abi>/snapshot.tar.xz`
@@ -170,6 +174,9 @@ jobs:
         with: { node-version: '24' }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
+      - name: 还原正式发布密钥（缺 secret 或指纹不符即失败）
+        shell: bash
+        run: bash scripts/ci/restore-release-key.sh
       - name: python -> python3
         run: |
           sudo apt-get update -y
@@ -284,15 +291,6 @@ jobs:
           done
           count=$(find plugins -maxdepth 1 -name '*.tgz' | wc -l)
           [ "$count" -eq 3 ] || { echo "::error::子仓 tgz 必须恰好 3 件"; exit 1; }
-      - name: 准备固定签名 keystore（与历史发布同一把）
-        # 注意：这一步**不是**隔离措施。签名密钥是仓库文件 `keystore/debug.keystore`，
-        # 从 checkout 那一刻起任何脚本都能读到（Gradle 在 app/build.gradle.kts:50 直接 pin 它）。
-        # 这里只是按 issue #735 的 B 方案，把这次**多余拷贝**推到构建与依赖安装之后，
-        # 减少一份密钥材料在盘上的存活时间；完整隔离需要 A（受保护 Environment + 独立签名作业）。
-        run: |
-          mkdir -p "$ANDROID_USER_HOME/.android"
-          cp keystore/debug.keystore "$ANDROID_USER_HOME/.android/debug.keystore"
-          ls -l "$ANDROID_USER_HOME/.android/debug.keystore"
       - name: 归集发布资产（APK + 注入后快照 + 子仓 tgz）
         shell: bash
         run: |
@@ -313,9 +311,9 @@ jobs:
           apk_count=$(find "$OUT/apk" -name '*.apk' | wc -l)
           [ "$apk_count" -ge 2 ] || { echo "::error::APK 少于 2 件（双 ABI 缺件）"; exit 1; }
           node scripts/check-apk-signatures.mjs --self-test
-          # keystore 凭据必须显式声明（issue #1031）：门禁不再回落到 androiddebugkey/android。
-          node scripts/check-apk-signatures.mjs --dir "$OUT/apk" --keystore keystore/debug.keystore \
-            --keystore-alias androiddebugkey --keystore-pass android
+          # keystore 凭据必须显式声明（issue #1031）：用正式发布密钥交叉核对，口令来自 secrets。
+          node scripts/check-apk-signatures.mjs --dir "$OUT/apk" --keystore "$OMNI_RELEASE_KEYSTORE" \
+            --keystore-alias "$OMNI_RELEASE_KEY_ALIAS" --keystore-pass "$OMNI_RELEASE_KEYSTORE_PASSWORD"
           # 产物形态门禁：签名全绿不区分 debug/release 变体（0.14.9 发布产物即 debug 变体，
           # badging 含 application-debuggable 而 v1/v2/v3 全 true）。--require：runner 装有 SDK，
           # aapt2 缺席即判红（不得以 SKIP 结案）。

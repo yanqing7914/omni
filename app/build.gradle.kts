@@ -46,11 +46,33 @@ android {
     noCompress += "xz"
   }
 
+  // 发布签名：正式密钥不进仓库，只从环境变量读取（CI 来自 GitHub Secrets，本机来自
+  // ~/.omni-release/env.sh）。三个变量都在时 debug 与 release 都用它签，这样本机开发包
+  // 也能覆盖安装到装着正式版的手机上；缺任一个就退回仓库里的 repoDebug，那种包过不了
+  // 签名门禁（期望证书锚是正式密钥的指纹），不能发布。
+  val releaseKeystore = providers.environmentVariable("OMNI_RELEASE_KEYSTORE").orNull
+  val releaseKeystorePassword = providers.environmentVariable("OMNI_RELEASE_KEYSTORE_PASSWORD").orNull
+  val releaseKeyAlias = providers.environmentVariable("OMNI_RELEASE_KEY_ALIAS").orNull
+  val hasReleaseKey = !releaseKeystore.isNullOrBlank() && !releaseKeystorePassword.isNullOrBlank() && !releaseKeyAlias.isNullOrBlank()
+  if (hasReleaseKey && !file(releaseKeystore!!).isFile) {
+    throw GradleException("OMNI_RELEASE_KEYSTORE 指向的文件不存在: $releaseKeystore")
+  }
+  val shippingSigning = if (hasReleaseKey) "omniRelease" else "repoDebug"
+
   signingConfigs {
-    // Fixed debug signing from the repo keystore: CI and local builds must produce
-    // byte-compatible signatures, otherwise users cannot install over previous
-    // releases (INSTALL_FAILED_UPDATE_INCOMPATIBLE). AGP's default debug keystore
-    // lookup (~/.android/debug.keystore) is unreliable on CI runners, so pin it.
+    if (hasReleaseKey) {
+      create("omniRelease") {
+        storeFile = file(releaseKeystore!!)
+        storeType = "PKCS12"
+        storePassword = releaseKeystorePassword
+        keyAlias = releaseKeyAlias
+        keyPassword = releaseKeystorePassword
+        enableV1Signing = true
+        enableV2Signing = true
+        enableV3Signing = true
+      }
+    }
+    // 仓库内的开发密钥（口令公开）：只给没有正式密钥的本地构建用，产物不可发布。
     create("repoDebug") {
       storeFile = rootProject.file("keystore/debug.keystore")
       storePassword = "android"
@@ -66,10 +88,10 @@ android {
   buildTypes {
     release {
       isMinifyEnabled = false
-      signingConfig = signingConfigs.getByName("repoDebug")
+      signingConfig = signingConfigs.getByName(shippingSigning)
     }
     debug {
-      signingConfig = signingConfigs.getByName("repoDebug")
+      signingConfig = signingConfigs.getByName(shippingSigning)
     }
   }
 

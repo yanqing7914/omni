@@ -49,7 +49,11 @@ New UI text ships in both Chinese and English.
 4. Check the draft, then publish it. The download site refreshes automatically.
 5. Users update from "Check for updates" in the app; data is kept.
 
-Every stable release must be signed with the same release key; changing it forces users to uninstall. The key never goes into the repository.
+Every stable release must be signed with the same release key; changing it forces users to uninstall.
+
+- The key never goes into the repository. CI restores it from Secrets (`OMNI_RELEASE_KEYSTORE_BASE64`, `OMNI_RELEASE_KEYSTORE_PASSWORD`, `OMNI_RELEASE_KEY_ALIAS`); see `scripts/ci/restore-release-key.sh`.
+- For a releasable local build, `source ~/.omni-release/env.sh` before running Gradle. Without those variables the build is signed with the repository's `keystore/debug.keystore`, which the signature gate rejects; use it for local debugging only.
+- The signature gate accepts only the certificate digest in `scripts/fixtures/apk-expected-cert.sha256`.
 
 ## Engine upgrade
 

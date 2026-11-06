@@ -38,7 +38,7 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
  * 单改文件即判红，且报错点名「期望证书锚被改动」。真要换发布密钥，必须同时改常量并附
  * 已发布资产的迁移证据，那是一次单独的发布决策，不属于任何构建修复。
  */
-export const PINNED_EXPECTED_CERT_SHA256 = '1beff7e88ac944fceda8c79467e4b3e89c721f12572d07f58870bd75526b59fa'
+export const PINNED_EXPECTED_CERT_SHA256 = 'a9f1200f7f4abe3a7976cbbf688bc31e3b04ccdbdf14d95c8f5c727e60c8c1d5'
 export const EXPECTED_CERT_FIXTURE = path.join(SCRIPT_DIR, 'fixtures', 'apk-expected-cert.sha256')
 
 /** 锚文件格式：`#` 开头的注释行与空行忽略，其余**恰好一行**小写十六进制 64 位。 */

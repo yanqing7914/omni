@@ -11,17 +11,22 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const GATE = join(ROOT, 'scripts', 'check-apk-signatures.mjs')
-const KEYSTORE = join(ROOT, 'keystore', 'debug.keystore')
+// 目录级门禁要走到 apksigner 那一层，keystore 必须与证书锚一致，也就是正式发布密钥（不在仓库里）。
+// 本机 source ~/.omni-release/env.sh、CI 由 restore-release-key.sh 还原；缺席时 skip。
+const RELEASE_KEY = process.env.OMNI_RELEASE_KEYSTORE && process.env.OMNI_RELEASE_KEY_ALIAS && process.env.OMNI_RELEASE_KEYSTORE_PASSWORD
+  ? { keystore: process.env.OMNI_RELEASE_KEYSTORE, alias: process.env.OMNI_RELEASE_KEY_ALIAS, pass: process.env.OMNI_RELEASE_KEYSTORE_PASSWORD }
+  : null
+const KEYSTORE = RELEASE_KEY?.keystore ?? join(ROOT, 'keystore', 'debug.keystore')
 
 // 需要真实 apksigner。拿不到时显式 skip（本机没有 Android SDK 的 CI 场景），不得静默当通过。
 const apksignerProbe = spawnSync(process.execPath, [GATE, '--apk', join(ROOT, 'nonexistent.apk'), '--keystore', KEYSTORE], { encoding: 'utf8' });
 const apksignerMissing = /apksigner not found/.test(String(apksignerProbe.stderr ?? '') + String(apksignerProbe.stdout ?? ''));
-const needsApksigner = { skip: apksignerMissing ? '本机没有 apksigner（无 Android SDK），该层无法取证' : false };
+const needsApksigner = { skip: apksignerMissing ? '本机没有 apksigner（无 Android SDK），该层无法取证'
+  : (RELEASE_KEY ? false : '没有正式发布密钥环境变量（OMNI_RELEASE_*），keystore 过不了证书锚') };
 
 // issue #1138：keystore 凭据不再有内置默认值，调用方必须显式声明 alias 与口令。
-// 本测试用仓库自带 debug keystore，凭据即它的公开值（与 build-apk-engine 的 REPO_DEBUG_KEYSTORE_CREDENTIALS 同源）。
 const runGate = (dir) => spawnSync(process.execPath,
-  [GATE, '--dir', dir, '--keystore', KEYSTORE, '--keystore-alias', 'androiddebugkey', '--keystore-pass', 'android'],
+  [GATE, '--dir', dir, '--keystore', KEYSTORE, '--keystore-alias', RELEASE_KEY?.alias ?? '', '--keystore-pass', RELEASE_KEY?.pass ?? ''],
   { encoding: 'utf8', windowsHide: true });
 
 test('negative control: a stale unverified APK in the delivery dir keeps the signature gate red', needsApksigner, () => {

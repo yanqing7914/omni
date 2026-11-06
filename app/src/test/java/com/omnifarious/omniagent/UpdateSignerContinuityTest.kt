@@ -1,6 +1,7 @@
 package com.omnifarious.omniagent
 
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -99,21 +100,27 @@ class UpdateSignerContinuityTest {
   }
 
   /**
-   * 签名配置必须保持「单把仓库内置密钥」——这是既定选择，不是待补的缺口。
+   * 签名配置：正式发布密钥只从环境变量读取（不进仓库），debug 与 release 用同一个签名档。
    *
-   * 曾经在本 PR 里引入过 `DSH_RELEASE_KEYSTORE` 的 CI secret 接缝，已按仓库所有者裁定撤回：
-   * 开源项目、不上 Google Play，密钥随仓公开是既定选择。这条用例反着钉：
-   * 一旦有人再引入第二把密钥的环境变量接缝，必须判红并回到所有者那边确认。
+   * 仓库里的 repoDebug 口令公开，任何人都能用它签出同证书的包，所以它只能做「没有正式密钥时」
+   * 的本地兜底；真正可发布的包由签名门禁的证书锚（正式密钥指纹）把关。这条用例钉住三件事：
+   * 正式密钥不以文件形式出现在仓库路径里、release/debug 不各自分叉、repoDebug 兜底仍在。
    */
   @Test
-  fun signingConfigStaysOnTheSingleRepoKeystore() {
+  fun releaseSigningComesOnlyFromEnvironment() {
     val gradle = repoFile("app/build.gradle.kts").readText()
-    // release 档必须紧接 isMinifyEnabled 之后显式指向 repoDebug（不静默换签、不回落别的档）。
-    assertTrue("release 必须显式用仓库内置 repoDebug 密钥（不静默换签）",
-      gradle.contains("signingConfig = signingConfigs.getByName(\"repoDebug\")"))
-    assertFalse("不得引入第二把发布密钥的 secret 接缝（密钥随仓公开是既定选择）",
-      gradle.contains("DSH_RELEASE_KEYSTORE"))
-    assertTrue("repoDebug 必须仍指向仓库内置 keystore（内容不得被改写/轮换）",
+    for (name in listOf("OMNI_RELEASE_KEYSTORE", "OMNI_RELEASE_KEYSTORE_PASSWORD", "OMNI_RELEASE_KEY_ALIAS")) {
+      assertTrue("正式密钥参数 $name 必须从环境变量读取",
+        gradle.contains("providers.environmentVariable(\"$name\")"))
+    }
+    assertFalse("正式密钥不得指向仓库内文件",
+      Regex("""create\("omniRelease"\)[\s\S]*?rootProject\.file""").containsMatchIn(
+        gradle.substringBefore("create(\"repoDebug\")")))
+    assertEquals("release 与 debug 必须用同一个签名档（不静默分叉）", 2,
+      Regex("""signingConfig = signingConfigs\.getByName\(shippingSigning\)""").findAll(gradle).count())
+    assertTrue("缺正式密钥时退回仓库 repoDebug",
+      gradle.contains("val shippingSigning = if (hasReleaseKey) \"omniRelease\" else \"repoDebug\""))
+    assertTrue("repoDebug 必须仍指向仓库内置 keystore",
       gradle.contains("storeFile = rootProject.file(\"keystore/debug.keystore\")"))
   }
 }

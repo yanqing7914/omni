@@ -42,6 +42,7 @@ jobs:
   source-audit:
     if: ${{ inputs.source_audit }}
     uses: ./.github/workflows/build-apk-source.yml
+    secrets: inherit
 
   build:
     if: ${{ !inputs.source_audit }}
@@ -56,6 +57,10 @@ jobs:
     env:
       # build-apk.mjs 依赖本仓库顶层 scripts/plugins/vendor/base；apk 仓库 = $GITHUB_WORKSPACE
       DSH_APK_DIR: ${{ github.workspace }}
+      # 正式发布密钥（GitHub Secrets）；restore-release-key.sh 还原后导出 OMNI_RELEASE_KEYSTORE 路径。
+      OMNI_RELEASE_KEYSTORE_BASE64: ${{ secrets.OMNI_RELEASE_KEYSTORE_BASE64 }}
+      OMNI_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.OMNI_RELEASE_KEYSTORE_PASSWORD }}
+      OMNI_RELEASE_KEY_ALIAS: ${{ secrets.OMNI_RELEASE_KEY_ALIAS }}
     steps:
       # 每个 ABI job 只需要本 ABI 的 base-usr 与共用 base-dsh；先缓存，未命中才按路径拉取。
       # checkout 的 lfs:true 是按 ref fetch，不能从 fetch-depth:0 推断它会下载历史全部 LFS。
@@ -96,6 +101,9 @@ jobs:
       - name: 准备 Java（gradle 需要）
         uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
+      - name: 还原正式发布密钥
+        shell: bash
+        run: bash scripts/ci/restore-release-key.sh
 
       - name: 准备并构建插件（统一清单、锁解析与单次构建）
         shell: bash
@@ -141,10 +149,9 @@ jobs:
           node scripts/check-apk-signatures.mjs --self-test
           mapfile -t apks < <(find out -type f -name '*.apk' | sort)
           [ "${#apks[@]}" -eq 1 ] || { echo "::error::当前 ABI 产物数不是 1: ${#apks[@]}"; exit 1; }
-          # keystore 凭据必须显式声明（issue #1031）：门禁不再回落到 androiddebugkey/android。
-          # 这里是仓库那份 keystore/debug.keystore 的公开凭据，与 app/build.gradle.kts 的 repoDebug 同源。
-          node scripts/check-apk-signatures.mjs --apk "${apks[0]}" --keystore keystore/debug.keystore \
-            --keystore-alias androiddebugkey --keystore-pass android
+          # keystore 凭据必须显式声明（issue #1031）：用正式发布密钥交叉核对，口令来自 secrets。
+          node scripts/check-apk-signatures.mjs --apk "${apks[0]}" --keystore "$OMNI_RELEASE_KEYSTORE" \
+            --keystore-alias "$OMNI_RELEASE_KEY_ALIAS" --keystore-pass "$OMNI_RELEASE_KEYSTORE_PASSWORD"
 
       - name: 上传 APK 产物（本地下载 debug；不出 Release）
         uses: actions/upload-artifact@v4

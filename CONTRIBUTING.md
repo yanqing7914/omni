@@ -49,7 +49,11 @@ Omni 是 DeepSeek Harness 的安卓客户端。参与前先读 [`AGENTS.md`](AGE
 4. 核对 draft Release 的资产和说明，确认后转为正式版。正式版发布后，下载站自动更新。
 5. 用户在 App 里点「检查更新」即可升级，数据保留。
 
-签名：所有正式版必须用同一把发布密钥签名，换了密钥用户就只能卸载重装。密钥不进仓库。
+签名：所有正式版必须用同一把发布密钥签名，换了密钥用户就只能卸载重装。
+
+- 密钥不进仓库。CI 从 Secrets（`OMNI_RELEASE_KEYSTORE_BASE64`、`OMNI_RELEASE_KEYSTORE_PASSWORD`、`OMNI_RELEASE_KEY_ALIAS`）还原，见 `scripts/ci/restore-release-key.sh`。
+- 本机构建可发布的包：先 `source ~/.omni-release/env.sh`，再跑 Gradle。不设这三个变量时用仓库里的 `keystore/debug.keystore` 签名，这种包过不了签名门禁，只能自己调试用。
+- 签名门禁只认 `scripts/fixtures/apk-expected-cert.sha256` 里的证书指纹。
 
 ## 引擎升级
 
