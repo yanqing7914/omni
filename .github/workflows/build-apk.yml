@@ -70,19 +70,17 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
           lfs: false
-      - name: 缓存底座归档（命中则跳过 LFS 拉取）
+      - name: 缓存底座归档（命中则跳过下载）
         id: lfs-base
         uses: actions/cache@v4
         with:
           path: base
-          key: lfsbase-${{ matrix.abi }}-${{ hashFiles(format('base/base-dsh.tar.xz'), format('base/base-usr-{0}.tar.xz', matrix.abi)) }}
-      - name: 按需拉取 LFS 底座（仅本 ABI，未命中缓存时）
-        if: steps.lfs-base.outputs.cache-hit != 'true'
+          key: base-v1-${{ matrix.abi }}-${{ hashFiles(format('base/base-dsh.tar.xz'), format('base/base-usr-{0}.tar.xz', matrix.abi)) }}
+      - name: 从 base-v1 Release 下载底座（仅本 ABI；按 pointer 里的 sha256 校验）
         shell: bash
-        run: |
-          set -e
-          git lfs install --local
-          git lfs pull --include="base/base-usr-${{ matrix.abi }}.tar.xz,base/base-dsh.tar.xz"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/fetch-base.sh "${{ matrix.abi }}"
       - name: 断言底座确实已落地（拒绝 LFS pointer 冒充文件）
         shell: bash
         run: |

@@ -57,19 +57,17 @@ jobs:
           fetch-depth: 0
           lfs: false                    # 见上方说明：改按需拉取，勿改回 true
       # 缓存键取 **pointer 文件的哈希**：pointer 内含 oid+size，对象一变键即变，不会命中陈旧归档。
-      - name: 缓存底座归档（命中则跳过 LFS 拉取）
+      - name: 缓存底座归档（命中则跳过下载）
         id: lfs-base
         uses: actions/cache@v4
         with:
           path: base
-          key: lfsbase-${{ matrix.abi }}-${{ hashFiles('base/base-dsh.tar.xz', format('base/base-usr-{0}.tar.xz', matrix.abi)) }}
-      - name: 按需拉取 LFS 底座（仅本 ABI，未命中缓存时）
-        if: steps.lfs-base.outputs.cache-hit != 'true'
+          key: base-v1-${{ matrix.abi }}-${{ hashFiles('base/base-dsh.tar.xz', format('base/base-usr-{0}.tar.xz', matrix.abi)) }}
+      - name: 从 base-v1 Release 下载底座（仅本 ABI；按 pointer 里的 sha256 校验）
         shell: bash
-        run: |
-          set -e
-          git lfs install --local
-          git lfs pull --include="base/base-usr-${{ matrix.abi }}.tar.xz,base/base-dsh.tar.xz"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/fetch-base.sh "${{ matrix.abi }}"
       # 守卫：按需拉取失败时工作区会留下约 130 字节的 pointer 文本——它「看起来是个文件」，
       # 能被 cp/tar 读到，失败会以「tar 解压出错」之类难懂的下游症状出现。这里在源头判红。
       - name: 断言底座确实已落地（拒绝 LFS pointer 冒充文件）
