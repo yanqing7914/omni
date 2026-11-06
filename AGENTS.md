@@ -150,7 +150,7 @@ adb -s <serial> install -r -t out\v<版本>\omni-v<版本>-arm64.apk
 
 | 你改了什么 | 必须更新 | 位置 |
 |---|---|---|
-| **任何**代码/行为改动 | 坑位（若踩过坑或修了坑） | 先写自己的记录 `docs/contrib/<github-account>/`（一人一目录，见本仓 `CONTRIBUTING.md`）；协调仓同路径为权威源。确认稳定且与个人无关的经验再由维护者汇总到 `docs/AGENTS/gotchas.md` **文末追加**，编号递增（允许空缺，**不得重编号**） |
+| **任何**代码/行为改动 | 坑位（若踩过坑或修了坑） | 写进 `docs/AGENTS/gotchas.md` **文末追加**（现象、真因、修法、复验证据四件事写全），编号递增（允许空缺，**不得重编号**） |
 | 新增或改写自定义界面 | 中英双语文案 | 页面侧 locale 同时注册 `zh`/`en`；壳侧 `strings.xml` 与 Kotlin 文案补英文；规则见本仓 `CONTRIBUTING.md` |
 | 版本发布 / 里程碑 | 更新记录（一行摘要，**倒序加在最上方**） | `docs/AGENTS/changelog-archive.md` |
 | 新增/删除 `.kt` 文件，或函数职责变化 | 模块地图 | `docs/AGENTS/modules.md` |
