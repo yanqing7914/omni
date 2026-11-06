@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Continue'
 $base = 'http://127.0.0.1:3081'
-$tmp = 'D:\coding\dsh-mobile\.deploy-tmp'
+$tmp = Join-Path (Split-Path -Parent $PSScriptRoot) '.deploy-tmp'
 
 # 1. create session
 [IO.File]::WriteAllText((Join-Path $tmp 'req-create.json'), '{"type":"client-request","rpcId":"t-1","method":"session.create","payload":{}}')

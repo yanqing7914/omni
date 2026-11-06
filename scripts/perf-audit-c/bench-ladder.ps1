@@ -4,8 +4,10 @@
 param([int]$Runs = 3, [string]$Variants = 'nullsink,nopath,noperms,full')
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$cp = 'D:\coding\dsh-mobile\omni\_dsh-wt\perf-audit\scripts\perf-audit-c\jvm\classes;C:\Users\17765\.gradle\caches\modules-2\files-2.1\org.apache.commons\commons-compress\1.28.0\e482f2c7a88dac3c497e96aa420b6a769f59c8d7\commons-compress-1.28.0.jar;C:\Users\17765\.gradle\caches\modules-2\files-2.1\org.tukaani\xz\1.10\1be8166f89e035a56c6bfc67dbc423996fe577e2\xz-1.10.jar;C:\Users\17765\.gradle\caches\modules-2\files-2.1\commons-io\commons-io\2.20.0\36f3474daec2849c149e877614e7f979b2082cd2\commons-io-2.20.0.jar;C:\Users\17765\.gradle\caches\modules-2\files-2.1\org.apache.commons\commons-lang3\3.18.0\fb14946f0e39748a6571de0635acbe44e7885491\commons-lang3-3.18.0.jar'
-$archive = 'D:\coding\dsh-mobile\omni\app\src\main\assets\snapshot.tar.xz'
+# classpath：jvm\classes + 本机 gradle 缓存里的 commons-compress 1.28.0 与 xz 1.10 jar（按需替换）。
+$cp = $env:PERF_AUDIT_CP
+if (-not $cp) { throw '先设置 $env:PERF_AUDIT_CP（见上方注释）' }
+$archive = Join-Path (Split-Path -Parent (Split-Path -Parent $here)) 'app\src\main\assets\snapshot.tar.xz'
 $tmp = Join-Path $env:TEMP 'dsh-perf-c-ladder'
 Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
