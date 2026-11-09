@@ -103,6 +103,34 @@ jobs:
         shell: bash
         run: bash scripts/ci/restore-release-key.sh
 
+      # check-dead-tokens / check-contract 以上游树为判据面（contract.upstreamRepo）；缺席时 dead-tokens exit 2。
+      # 与 build-apk-source.yml 同一步骤，提交与标签都取自 scripts/contract.json。
+      - name: 检出钉住的 DeepSeek Harness 上游树（门禁判据面）
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .deploy-tmp
+          # 已存在则复用：CI 每轮全新目录，本地复跑却会撞 `destination path already exists`。
+          # 下面几条 fetch/checkout 本身幂等，只有 clone 不是，故只守这一条。
+          if [ ! -d .deploy-tmp/deepseek-harness/.git ]; then
+            git clone --filter=blob:none --no-checkout --depth=1 https://github.com/deepseek-ai/deepseek-harness.git .deploy-tmp/deepseek-harness
+          fi
+          # 合同是唯一真源（0.14.8 起不再写死）：写死的提交/标签会在每次引擎追版后静默失效。
+          COMMIT=$(node -p 'require("./scripts/contract.json").upstream.commit')
+          TAG=$(node -p 'require("./scripts/contract.json").baseline')
+          git -C .deploy-tmp/deepseek-harness fetch --depth=1 origin "$COMMIT"
+          git -C .deploy-tmp/deepseek-harness fetch --depth=1 origin "refs/tags/dsh-v$TAG:refs/tags/dsh-v$TAG"
+          # A previous interrupted build may have modified tracked inputs before this checkout.
+          # Reset only this dedicated source checkout; preserve ignored dependency caches.
+          test "$(realpath .deploy-tmp/deepseek-harness)" = "$(realpath .)/.deploy-tmp/deepseek-harness"
+          git -C .deploy-tmp/deepseek-harness checkout -- .
+          git -C .deploy-tmp/deepseek-harness clean -fdq
+          git -C .deploy-tmp/deepseek-harness checkout --detach "$COMMIT"
+          test "$(git -C .deploy-tmp/deepseek-harness rev-parse HEAD)" = "$COMMIT"
+          test "$(git -C .deploy-tmp/deepseek-harness describe --tags --always)" = "dsh-v$TAG"
+          node -e 'const c=require("./scripts/contract.json"); if(c.upstreamRepo!==".deploy-tmp/deepseek-harness" || !c.baseline || !c.upstream.commit) throw Error("source workflow identity does not match contract")'
+          node -e 'const c=require("./scripts/contract.json"), p=require("./.deploy-tmp/deepseek-harness/package.json"); if(!c.upstream.packageManager || !c.upstream.enginesNode || p.version!==c.baseline || p.packageManager!==c.upstream.packageManager || p.engines.node!==c.upstream.enginesNode) throw Error("official Harness runtime policy changed")'
+
       - name: 准备并构建插件（统一清单、锁解析与单次构建）
         shell: bash
         run: |
