@@ -122,10 +122,10 @@ jobs:
           git -C .deploy-tmp/deepseek-harness fetch --depth=1 origin "refs/tags/dsh-v$TAG:refs/tags/dsh-v$TAG"
           # A previous interrupted build may have modified tracked inputs before this checkout.
           # Reset only this dedicated source checkout; preserve ignored dependency caches.
+          # 用 checkout -f 丢弃改动：刚 --no-checkout 克隆时索引为空，`checkout -- .` 会报 pathspec 不匹配。
           test "$(realpath .deploy-tmp/deepseek-harness)" = "$(realpath .)/.deploy-tmp/deepseek-harness"
-          git -C .deploy-tmp/deepseek-harness checkout -- .
+          git -C .deploy-tmp/deepseek-harness checkout -f --detach "$COMMIT"
           git -C .deploy-tmp/deepseek-harness clean -fdq
-          git -C .deploy-tmp/deepseek-harness checkout --detach "$COMMIT"
           test "$(git -C .deploy-tmp/deepseek-harness rev-parse HEAD)" = "$COMMIT"
           test "$(git -C .deploy-tmp/deepseek-harness describe --tags --always)" = "dsh-v$TAG"
           node -e 'const c=require("./scripts/contract.json"); if(c.upstreamRepo!==".deploy-tmp/deepseek-harness" || !c.baseline || !c.upstream.commit) throw Error("source workflow identity does not match contract")'

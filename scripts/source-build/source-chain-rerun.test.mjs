@@ -192,8 +192,11 @@ test('source reset restores inputs but preserves ignored dependencies', linux, (
   writeFileSync(join(source, 'source.txt'), 'interrupted override'); writeFileSync(join(source, 'untracked.txt'), 'remove')
   mkdirSync(join(source, 'node_modules')); writeFileSync(join(source, 'node_modules/sentinel'), 'keep')
   const checkout = step('Checkout pinned DeepSeek Harness source')
-  const reset = checkout.slice(checkout.indexOf('test "$(realpath'), checkout.indexOf('\ngit -C .deploy-tmp/deepseek-harness checkout --detach'))
-  const r = bash(reset, root)
+  // 复位段到 clean 为止：checkout -f --detach "$COMMIT" 丢弃改动，clean 删未跟踪文件、保留被忽略的依赖。
+  const cleanLine = 'git -C .deploy-tmp/deepseek-harness clean -fdq'
+  const reset = checkout.slice(checkout.indexOf('test "$(realpath'), checkout.indexOf(cleanLine) + cleanLine.length)
+  assert.ok(reset.includes('checkout -f --detach "$COMMIT"'), reset)
+  const r = bash(reset, root, { COMMIT: git('rev-parse', 'HEAD').toString().trim() })
   assert.equal(r.status, 0, r.stderr)
   assert.equal(readFileSync(join(source, 'source.txt'), 'utf8'), 'pinned')
   assert.equal(existsSync(join(source, 'untracked.txt')), false)
