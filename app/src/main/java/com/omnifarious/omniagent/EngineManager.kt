@@ -963,6 +963,31 @@ class EngineManager(private val context: Context, private val pickToken: String?
   }
 
   /**
+   * 在 [block] 执行期间提供内嵌快照的随机读源（供按 block 并行解码）；拿不到时传 null。
+   *
+   * 与 [bundledSnapshotUncompressedBytes] 同一前提：asset 在 APK 里 STORED，openFd 才给得出连续字节段。
+   * 各解码线程各开一个 [XzIndexTotal.ChannelRange]，共用同一个 FileChannel 的 positional read，
+   * 互不移动对方的读位置。fd 在 [block] 返回或抛出后关闭，所以解码线程必须在此之前全部退出——
+   * SnapshotExtractor.extract 返回前会关闭并等待它的线程池。
+   */
+  private fun <T> withBundledSnapshotRandomSource(block: (XzRandomSource?) -> T): T {
+    val afd = try {
+      context.assets.openFd(BUNDLED_SNAPSHOT_ASSET)
+    } catch (t: Throwable) {
+      Log.w(TAG, "bundled snapshot is not randomly readable; decoding single-threaded", t)
+      return block(null)
+    }
+    return afd.use {
+      afd.createInputStream().use { stream ->
+        val channel = stream.channel
+        val start = afd.startOffset
+        val length = afd.length
+        block(XzRandomSource { XzIndexTotal.ChannelRange(channel, start, length) })
+      }
+    }
+  }
+
+  /**
    * 本次快照刷新是首次安装还是覆盖安装后的更新（只用于启动页文案；须在刷新开始前调用）。
    */
   internal fun currentRuntimeInstallKind(): RuntimeInstallKind =
@@ -1001,14 +1026,17 @@ class EngineManager(private val context: Context, private val pickToken: String?
       // 性能审计 #6：快照解压分段。只在「快照不新鲜」时执行（首装/覆盖安装），
       // 因此这条记录出现即代表本次启动走了全量解压路径，不与日常冷启动混淆。
       val extractStartMs = android.os.SystemClock.elapsedRealtime()
-      context.assets.open(BUNDLED_SNAPSHOT_ASSET).use { input ->
-        SnapshotExtractor.extract(input, uncompressedTotal, stage, onProgress, runtimeRoot = context.filesDir)
+      val decodeThreads = withBundledSnapshotRandomSource { randomSource ->
+        context.assets.open(BUNDLED_SNAPSHOT_ASSET).use { input ->
+          SnapshotExtractor.extract(input, uncompressedTotal, stage, onProgress, runtimeRoot = context.filesDir, randomSource = randomSource)
+        }
       }
       BootPhaseTrace.mark(
         context,
         BootPhaseTrace.SNAPSHOT_EXTRACT,
         "ms=" + (android.os.SystemClock.elapsedRealtime() - extractStartMs) +
-          " compressedBytes=" + assetLength + " uncompressedBytes=" + uncompressedTotal,
+          " compressedBytes=" + assetLength + " uncompressedBytes=" + uncompressedTotal +
+          " decodeThreads=" + decodeThreads,
       )
       true
     } catch (t: Throwable) {
