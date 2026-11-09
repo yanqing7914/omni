@@ -162,6 +162,15 @@ jobs:
           set -e
           node scripts/build-snapshot-013.mjs "${{ matrix.abi }}"
 
+      - name: Kotlin 单测（check-kotlin-test-count 的输入）
+        shell: bash
+        run: |
+          set -e
+          # build-apk.mjs 的聚合门禁里 check-kotlin-test-count.mjs 按设计在没有 gradle 结果时判红
+          # （拒绝「一个用例都没跑」冒充通过）。release.yml 与 build-apk-source.yml 都在 APK 步前跑本步。
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest --no-daemon --console=plain
+
       - name: 构建 APK ${abi}（注入插件 + 门禁 + gradle + 产物）
         shell: bash
         run: |

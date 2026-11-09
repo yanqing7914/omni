@@ -290,7 +290,7 @@ try {
   // 「只按退出码判」分不清「全绿」与「一个用例都没跑」；本门禁逐类比对基线 + 断言无缺席 + 结果新鲜。
   // **本轮去掉 --allow-missing**：它让「结果目录不存在」变成 SKIP⇒绿，正是 G.0 ⑤ 那条结构性脱节
   // （类被删/漏编译时 exit 仍 0）。真检点已挂到 apk CI 的 testDebugUnitTest **之后**（那里结果必在），
-  // 云端 build-apk.yml 不产测试结果、不跑本门禁 ⇒ 该路径不再有「用 SKIP 冒充通过」的余地。
+  // 云端 build-apk.yml 同样在本步之前跑 :app:testDebugUnitTest ⇒ 不再有「用 SKIP 冒充通过」的余地。
   log('门禁：Kotlin 单测数量反回归（逐类基线只许升 + 无缺席 + 结果新鲜）…')
   run('node', [gate('check-kotlin-test-count.mjs')])
   // 执行地图覆盖与锚点门禁（0.14.2 D7）：输入在 apk 仓，与本地链/发布链同一份实现。
