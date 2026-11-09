@@ -946,6 +946,29 @@ class EngineManager(private val context: Context, private val pickToken: String?
     get() = STARTING.get()
 
   /**
+   * 内嵌快照解压后的总字节数（来自 xz 尾部 index，只读文件尾部几 KB，不解码）。
+   *
+   * 前提是 asset 在 APK 里 STORED（build.gradle.kts 的 `noCompress += "xz"`）：那样 openFd 给出的是
+   * APK 文件里一段连续字节，可以随机读尾部。被压缩存储时 openFd 抛异常，这里返回 null（不确定态）。
+   */
+  private fun bundledSnapshotUncompressedBytes(): Long? = try {
+    context.assets.openFd(BUNDLED_SNAPSHOT_ASSET).use { afd ->
+      afd.createInputStream().use { stream ->
+        XzIndexTotal.uncompressedSize(XzIndexTotal.ChannelRange(stream.channel, afd.startOffset, afd.length))
+      }
+    }
+  } catch (t: Throwable) {
+    Log.w(TAG, "could not read the snapshot xz index; progress stays indeterminate", t)
+    null
+  }
+
+  /**
+   * 本次快照刷新是首次安装还是覆盖安装后的更新（只用于启动页文案；须在刷新开始前调用）。
+   */
+  internal fun currentRuntimeInstallKind(): RuntimeInstallKind =
+    runtimeInstallKind(liveRuntimePresent = nodeBin.exists(), committedFingerprintPresent = fingerprintFile().exists())
+
+  /**
    * Extract the bundled snapshot archive into [stage]. The live tree is never a
    * destination: extraction is only ever performed inside the transaction stage.
    *
@@ -971,18 +994,21 @@ class EngineManager(private val context: Context, private val pickToken: String?
       Log.w(TAG, "could not read bundled snapshot asset length; continuing with unknown total", t)
       0L
     }
+    // 进度分母必须是**解压后**总量（xz index 里的真值）；读不到就传 0 = 未知，界面走不确定态。
+    // 旧实现把压缩长度当分母，分子却是解压字节，于是读数能超过 100%（见 RuntimeExtractProgress.kt）。
+    val uncompressedTotal = bundledSnapshotUncompressedBytes() ?: 0L
     return try {
       // 性能审计 #6：快照解压分段。只在「快照不新鲜」时执行（首装/覆盖安装），
       // 因此这条记录出现即代表本次启动走了全量解压路径，不与日常冷启动混淆。
       val extractStartMs = android.os.SystemClock.elapsedRealtime()
       context.assets.open(BUNDLED_SNAPSHOT_ASSET).use { input ->
-        SnapshotExtractor.extract(input, assetLength, stage, onProgress, runtimeRoot = context.filesDir)
+        SnapshotExtractor.extract(input, uncompressedTotal, stage, onProgress, runtimeRoot = context.filesDir)
       }
       BootPhaseTrace.mark(
         context,
         BootPhaseTrace.SNAPSHOT_EXTRACT,
         "ms=" + (android.os.SystemClock.elapsedRealtime() - extractStartMs) +
-          " compressedBytes=" + assetLength,
+          " compressedBytes=" + assetLength + " uncompressedBytes=" + uncompressedTotal,
       )
       true
     } catch (t: Throwable) {

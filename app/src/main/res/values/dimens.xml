@@ -19,6 +19,8 @@
   <dimen name="ds_radius_pill">999dp</dimen>
   <dimen name="ds_radius_icon">18dp</dimen>
   <dimen name="ds_progress_height">5dp</dimen>
+  <!-- 启动页解压进度条与上方说明之间的留白（首装等待期的视觉主体，比卡内其它段落多一档）。 -->
+  <dimen name="ds_guide_progress_top_gap">24dp</dimen>
   <dimen name="ds_logo_size">28dp</dimen>
   <dimen name="ds_logo_shell">52dp</dimen>
   <dimen name="ds_btn_height">52dp</dimen>

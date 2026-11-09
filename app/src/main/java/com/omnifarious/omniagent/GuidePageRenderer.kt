@@ -69,6 +69,12 @@ internal fun hintAccepted(current: HintSource?, currentSticky: Boolean, incoming
 
 // ── S1-4 → 0.14.2 P2：进度**不再印任何数字**（用户口径，逐条落地）────────────────
 //
+// 【后续】分母问题已从根上解决：真实解压总量来自 xz 尾部 index（RuntimeExtractProgress.kt 的
+// XzIndexTotal），分子改为解码器读出的字节数，两者同口径。有总量时进度条走确定态，百分比与剩余时间
+// 由 RuntimeExtractProgress 格式化；拿不到总量时仍是下面这套不确定态 + 无数字车轱辘话。
+// 判据也随之从「文案不得含数字」改为「数字只能来自进度模型」（numbersOnlyFromModel）。
+// 下面保留的是当年的缺陷与理由——说的是**编造分母**为什么不能回来，不是百分比本身不能回来。
+//
 // 缺陷现场（真机读数）：「已写入 1157 MB / 约 700 MB（99%）」——分子大于分母还报 99%。
 // 真因不是「四舍五入错了」，而是**分母本身是编造的**：旧实现拿
 // `RUNTIME_UNCOMPRESSED_APPROX_BYTES = 700MB` 当总量，而真实解压是**增量的**（既包含本次解压的
@@ -234,6 +240,8 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
   /** 引擎启动流写入解压进度（EngineStartFlow）。 */
   lateinit var progressText: TextView
   private lateinit var progressBar: ProgressBar
+  private lateinit var progressPercent: TextView
+  private lateinit var progressEta: TextView
   private lateinit var crashBanner: TextView
   private lateinit var logSummary: TextView
   /** 测试界面三段式结构块：入场 stagger 动画按块依次淡入。 */
@@ -396,6 +404,8 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
     engineStatus = chrome.engineStatus
     progressText = chrome.progressText
     progressBar = chrome.progressBar
+    progressPercent = chrome.progressPercent
+    progressEta = chrome.progressEta
     crashBanner = chrome.crashBanner
     logSummary = chrome.logSummary
     brandBlock = chrome.brandBlock
@@ -487,7 +497,14 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
     // 0.14.2 P2：进度条**恒为不确定态**。旧实现会在流程给出「同口径的 done/total」时切确定档，
     // 但那个 total 是编造常数（见上方 P2 说明），于是进度条宣称的比例也是编造的。
     // 现在只保留循环动画：它如实表达「还在动」，不表达「动了多少百分比」。
-    progressBar.isIndeterminate = true
+    // 默认不确定态；只有解压相位里、拿到 xz index 真实总量后，showExtractProgress 才切确定态。
+    // 解压期间流程每报一个阶段都会重设一次 Extracting，那时已切出的确定态保持不动（否则进度条来回闪）。
+    if (phase != GuidePhase.Extracting || !progressDeterminateShown) {
+      progressBar.isIndeterminate = true
+      progressDeterminateShown = false
+      progressPercent.visibility = View.GONE
+      progressEta.visibility = View.GONE
+    }
     if (phase != GuidePhase.Extracting) progressText.visibility = View.GONE
 
     val dotColor = when (phase) {
@@ -665,6 +682,69 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
     progressText.text = localizedStagePhrase(stageRotation.currentPhrase())
   }
 
+  // —— 真实进度（有 xz index 总量时）——
+  private val extractProgress = RuntimeExtractProgress()
+  private var extractKind = RuntimeInstallKind.REFRESH
+  private var progressDeterminateShown = false
+  /** 首装说明里的时长段（由模型格式化）；null = 还没有估计。 */
+  private var extractDurationSegment: String? = null
+
+  /**
+   * 解压流程开始前调用一次：记下首次/非首次（决定标题与说明），清空进度模型。
+   * [kind] 须在刷新**之前**判定（刷新完成后 live 树与指纹都在，什么都会被判成非首次）。
+   */
+  fun beginRuntimeExtract(kind: RuntimeInstallKind) {
+    extractKind = kind
+    extractProgress.reset()
+    extractDurationSegment = null
+    progressDeterminateShown = false
+  }
+
+  /** 解压相位的标题（首次安装 / 更新）。 */
+  fun runtimeExtractPhaseTitle(): String = runtimeExtractTitle(extractKind, UiText.isEnglish(activity))
+
+  /**
+   * 解压进度回调的写入口：[total] 是 xz index 的解压总量，非正 = 未知。
+   *
+   * 有总量：进度条确定态，百分比与剩余时间来自 [RuntimeExtractProgress]；左侧阶段句保留流程给的那句，不轮换。
+   * 无总量：退回 [showRuntimeStage]（不确定态 + 无数字轮换句）。
+   */
+  fun showExtractProgress(nowMs: Long, done: Long, total: Long) {
+    val english = UiText.isEnglish(activity)
+    val view = extractProgress.update(nowMs, done, total, english)
+    if (!view.determinate) {
+      showRuntimeStage(nowMs)
+      return
+    }
+    renderDeterminate(view)
+    val minutes = extractProgress.estimatedTotalMinutes
+    if (extractKind == RuntimeInstallKind.FIRST_INSTALL && minutes != null && extractDurationSegment == null) {
+      extractDurationSegment = formatTotalDuration(minutes, english)
+      if (lastGuidePhase == GuidePhase.Extracting) pushHint(extractHintBody(), HintSource.PHASE, sticky = true)
+    }
+  }
+
+  /** 流程报告刷新完成：百分比到 100（此前最多 99，见 [MonotonicPercent]）。 */
+  fun finishExtractProgress() {
+    if (!progressDeterminateShown) return
+    renderDeterminate(extractProgress.finish(UiText.isEnglish(activity)))
+  }
+
+  private fun renderDeterminate(view: ExtractProgressView) {
+    val pct = view.percent ?: return
+    if (!progressDeterminateShown) {
+      progressDeterminateShown = true
+      progressBar.isIndeterminate = false
+      if (progressText.text.isNullOrBlank()) progressText.text = localizedStagePhrase(RUNTIME_STAGE_PHRASES[0])
+    }
+    progressText.visibility = View.VISIBLE
+    progressBar.setProgress(pct, DsUi.animationsEnabled(activity))
+    progressPercent.text = view.percentLabel
+    progressPercent.visibility = View.VISIBLE
+    progressEta.text = view.etaLabel
+    progressEta.visibility = if (view.etaLabel.isNullOrEmpty()) View.GONE else View.VISIBLE
+  }
+
   /** Stage phrases stay a single list for the rotation test; the copy is translated here. */
   private fun localizedStagePhrase(zh: String): String = when (zh) {
     RUNTIME_STAGE_PHRASES[0] -> UiText.t(activity, zh, "Extracting the runtime…")
@@ -705,11 +785,7 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
    * 所以这里只给「别关应用」这个用户真正需要知道的事。
    */
   private fun extractHintBody(): String =
-    UiText.t(
-      activity,
-      "正在解压运行时，需数分钟，请勿关闭。",
-      "Unpacking the runtime; this takes a few minutes. Keep the app open.",
-    )
+    runtimeExtractHint(extractKind, extractDurationSegment, UiText.isEnglish(activity))
 
   /** 动效开关订阅的注销句柄；当前是否应脉冲由 [statusPulseWanted] 记住。 */
   private var motionUnsubscribe: (() -> Unit)? = null

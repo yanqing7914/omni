@@ -93,9 +93,11 @@ object SnapshotExtractor {
   /**
    * Extract an xz-compressed tar stream.
    * @param input raw xz stream.
-   * @param totalBytes expected stream size (for progress; 0 = unknown).
+   * @param totalBytes decoded (uncompressed) stream size from the xz index, the denominator of
+   *   [onProgress]; 0 = unknown. Passing the compressed length here is the old fabricated-denominator bug.
    * @param dest destination root (the archive holds usr/ + home/).
-   * @param onProgress bytesDone, bytesTotal.
+   * @param onProgress bytesDone, bytesTotal. bytesDone counts bytes read out of the xz decoder (tar
+   *   headers and padding included), the same unit as the xz index total; roughly once per MiB.
    * @param runtimeRoot absolute link targets are allowed only inside this root. The
    *   bundled snapshot ships absolute applets (vim/busybox …) that point at the
    *   *live* runtime path (`files/usr/...`), so extraction into a staging directory
@@ -134,10 +136,11 @@ object SnapshotExtractor {
     // 不关流的后果不是「泄漏一点点」：xz 解码器持有 native 级缓冲，且调用方在刷新事务里会立刻重试，
     // 每次启动都叠一次。
     val xz = XZCompressorInputStream(input)
-    val tar = TarArchiveInputStream(xz)
+    val decoded = DecodedProgress(xz, totalBytes, onProgress)
+    val tar = TarArchiveInputStream(decoded)
     var primary: Throwable? = null
     try {
-      extractEntries(tar, dest, totalBytes, onProgress, runtimeRoot, limits)
+      extractEntries(tar, dest, decoded, runtimeRoot, limits)
     } catch (t: Throwable) {
       primary = t
       throw t
@@ -167,8 +170,7 @@ object SnapshotExtractor {
   private fun extractEntries(
     tar: TarArchiveInputStream,
     dest: File,
-    totalBytes: Long,
-    onProgress: (Long, Long) -> Unit,
+    progress: DecodedProgress,
     runtimeRoot: File,
     limits: Limits,
   ) {
@@ -241,6 +243,7 @@ object SnapshotExtractor {
                 prefixLength += copied
               }
               out.write(buf, 0, n)
+              progress.reportIfDue()
               n = tar.read(buf)
             }
           }
@@ -250,12 +253,56 @@ object SnapshotExtractor {
           target.setExecutable(SnapshotFileMode.isDirectlyExecutable(prefix, prefixLength), true)
         }
       }
-      // done 已在循环头部（上限检查处）累加过 entry.size——这里不再重复累加（#680）：
-      // 双倍计数让 8 GiB 总量上限在 4 GiB 就触发，正常快照被误判成解压炸弹。
-      if (done % (1024 * 1024) < entry.size) onProgress(done, totalBytes)
+      // done 只用于上限判定（#680：不得重复累加）。进度改报解码器读出的字节数（[DecodedProgress]），
+      // 与 xz index 的解压总量同口径——条目字节不含 tar 头与填充，拿它对 index 总量永远到不了头。
+      progress.reportIfDue()
       entry = tar.nextEntry
     }
   }
+
+  /**
+   * 解码器输出的字节计数 + 约每 MiB 一次的进度回调。
+   *
+   * 计数在 tar 之下：TarArchiveInputStream 读出的每个字节（条目、头、块填充）都经过这里，
+   * 所以全量读完时计数等于 xz index 记录的解压总量，进度分子分母同口径。
+   */
+  internal class DecodedProgress(
+    input: InputStream,
+    private val totalBytes: Long,
+    private val onProgress: (Long, Long) -> Unit,
+  ) : java.io.FilterInputStream(input) {
+    var count = 0L
+      private set
+    private var lastReported = 0L
+
+    override fun read(): Int {
+      val b = super.read()
+      if (b >= 0) count += 1
+      return b
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+      val n = super.read(b, off, len)
+      if (n > 0) count += n
+      return n
+    }
+
+    override fun skip(n: Long): Long {
+      val skipped = super.skip(n)
+      if (skipped > 0) count += skipped
+      return skipped
+    }
+
+    override fun markSupported(): Boolean = false
+
+    fun reportIfDue() {
+      if (count - lastReported < REPORT_STEP_BYTES) return
+      lastReported = count
+      onProgress(count, totalBytes)
+    }
+  }
+
+  private const val REPORT_STEP_BYTES = 1024L * 1024L
 
   /**
    * Symlink target policy (sandbox boundary for archives fetched over plain HTTP).
