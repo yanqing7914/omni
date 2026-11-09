@@ -317,6 +317,45 @@ class ParallelSnapshotExtractTest {
   }
 
   @Test(timeout = 60_000)
+  fun `B3 中间块只坏 check 字段而压缩数据完好时两条路径都报错`() {
+    try {
+      val xz = xzMultiBlock(fixtureTar(), BLOCK)
+      val f0 = tempFile(xz)
+      // xz 格式：块 = 头 + 压缩数据 + Block Padding + Check；index 里的块长（getBlockCompSize）
+      // 是含填充与 check 的 TotalSize，所以 check 正好是块的最后 8 字节（夹具用 CRC64）。
+      val (checkStart, checkType) = SeekableFileInputStream(f0).use {
+        SeekableXZInputStream(it).let { s -> (s.getBlockCompPos(3) + s.getBlockCompSize(3) - 8) to s.getBlockCheckType(3) }
+      }
+      assertEquals("夹具必须用 CRC64（8 字节 check）", org.tukaani.xz.XZ.CHECK_CRC64, checkType)
+      val corrupt = xz.copyOf()
+      for (i in 0 until 8) {
+        val at = (checkStart + i).toInt()
+        corrupt[at] = (corrupt[at].toInt() xor 0xFF).toByte()
+      }
+      val src = tempFile(corrupt)
+
+      val singleError = runCatching { extractSingle(corrupt, tempDir("pxz-check-single")) }.exceptionOrNull()
+      assertNotNull("单线程路径对照：check 不符必须失败", singleError)
+      assertTrue(causeChain(singleError!!).any { it is CorruptedInputException })
+
+      var opened: ParallelXzInputStream? = null
+      val parallelError = runCatching {
+        extractParallel(fileSource(src), tempDir("pxz-check-parallel"), onOpen = { opened = it })
+      }.exceptionOrNull()
+      assertNotNull("并行路径不得静默通过 check 不符的块", parallelError)
+      val corrupted = causeChain(parallelError!!).filterIsInstance<CorruptedInputException>()
+      assertTrue("cause 链上必须有 CorruptedInputException：$parallelError", corrupted.isNotEmpty())
+      assertTrue("必须是完整性检查失败而不是压缩数据损坏：${corrupted.first().message}",
+        corrupted.first().message.orEmpty().contains("Integrity check"))
+      assertNotNull("必须确实走了并行路径", opened)
+      assertTrue(opened!!.workersTerminated)
+      assertTrue(awaitNoDecoderThreads())
+    } finally {
+      cleanup()
+    }
+  }
+
+  @Test(timeout = 60_000)
   fun `B3 tar 层提前失败时关闭流会停掉仍在解码的线程`() {
     try {
       val src = tempFile(xzMultiBlock(fixtureTar(), BLOCK))
