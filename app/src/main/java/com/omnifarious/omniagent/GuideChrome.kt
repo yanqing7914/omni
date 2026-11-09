@@ -27,6 +27,10 @@ internal class GuideChrome(
   val crashBanner: TextView,
   val progressBar: ProgressBar,
   val progressText: TextView,
+  /** 确定态百分比（进度条右下）；不确定态隐藏。文本只来自 RuntimeExtractProgress。 */
+  val progressPercent: TextView,
+  /** 剩余时间（「正在估算…」或「剩余约 N 分钟」）；不确定态隐藏。 */
+  val progressEta: TextView,
   val logSummary: TextView,
   val logSection: View,
   val copyLog: TextView,
@@ -256,18 +260,49 @@ internal fun buildGuideChrome(activity: ComponentActivity, callbacks: GuideCallb
     val lp = LinearLayout.LayoutParams(
       ViewGroup.LayoutParams.MATCH_PARENT, dpix(R.dimen.ds_progress_height),
     )
-    lp.topMargin = dpix(R.dimen.ds_space_20)
+    lp.topMargin = dpix(R.dimen.ds_guide_progress_top_gap)
     layoutParams = lp
   }
   card.addView(progressBar)
 
+  // 进度条下的一行：左边阶段句（次要色），右边百分比（主色、等宽数字，读数跳动时不左右晃）。
+  // 下一行剩余时间（三级色、小一号）。层级：标题 > 说明 > 进度条 > 百分比 > 阶段/剩余时间。
   val progressText = TextView(activity).apply {
     setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
     setTextColor(color(R.color.ds_text_secondary))
-    setPadding(0, dpix(R.dimen.ds_space_8), 0, 0)
+    maxLines = 1
+    ellipsize = TextUtils.TruncateAt.END
+    visibility = View.GONE
+    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+  }
+  val progressPercent = TextView(activity).apply {
+    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+    setTextColor(color(R.color.ds_text_primary))
+    typeface = typeMedium()
+    fontFeatureSettings = "tnum"
+    gravity = Gravity.END
+    visibility = View.GONE
+    layoutParams = LinearLayout.LayoutParams(
+      ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+    ).apply { marginStart = dpix(R.dimen.ds_space_12) }
+  }
+  val progressRow = LinearLayout(activity).apply {
+    orientation = LinearLayout.HORIZONTAL
+    gravity = Gravity.CENTER_VERTICAL
+    setPadding(0, dpix(R.dimen.ds_space_12), 0, 0)
+  }
+  progressRow.addView(progressText)
+  progressRow.addView(progressPercent)
+  card.addView(progressRow)
+
+  val progressEta = TextView(activity).apply {
+    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+    setTextColor(color(R.color.ds_text_tertiary))
+    fontFeatureSettings = "tnum"
+    setPadding(0, dpix(R.dimen.ds_space_4), 0, 0)
     visibility = View.GONE
   }
-  card.addView(progressText)
+  card.addView(progressEta)
 
   val runtimeChip = chipView(activity, typeMedium())
   // S1-7/S1-8/S1-9：存储 chip 的**点击语义与观感都随状态变**，因此构建期不再绑定单一监听
@@ -601,6 +636,8 @@ internal fun buildGuideChrome(activity: ComponentActivity, callbacks: GuideCallb
     crashBanner = crashBanner,
     progressBar = progressBar,
     progressText = progressText,
+    progressPercent = progressPercent,
+    progressEta = progressEta,
     logSummary = logSummary,
     logSection = logSection,
     copyLog = copyLog,
