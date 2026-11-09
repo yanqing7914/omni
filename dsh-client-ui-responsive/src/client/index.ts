@@ -52,6 +52,12 @@ import { SessionLogDialogObserver } from './session-log-dialog-observer.ts'
 import { openSessionForNotify, type SessionOpenFace } from './mobile/notify-landing.ts'
 import { DevSection } from './dev-section/DevSection.tsx'
 import { PhoneControlSection } from './dev-section/phone-control.tsx'
+
+/**
+ * 「手机控制」设置分区冻结开关（2026-11-09 用户定）：为 true 时不注册该分区，设置页看不到入口。
+ * 只藏入口：PhoneControlSection 与 android_capabilities 解锁的手机工具都不动，改回 false 即恢复。
+ */
+export const PHONE_CONTROL_FROZEN = true
 import { NotifySettingsSection } from './dev-section/notify-settings.tsx'
 import { ApkUpdateSection } from './dev-section/apk-update.tsx'
 import { DEV_SECTION_CSS } from './dev-section/dev-section.css.ts'
@@ -382,12 +388,15 @@ export function apply(ctx: ClientContext): void {
   }, NotifySettingsSection))
 
   // 手机控制（0.14.0 用户定例）：把屏幕/Shizuku/虚拟屏/浮窗/无障碍/强制销毁收进独立设置页。
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'android-phone-control',
-    order: 98,
-    label: () => tr('手机控制', 'Phone control'),
-  }, PhoneControlSection))
+  // 已冻结（PHONE_CONTROL_FROZEN）：设置页不出现这一行，页面代码与 AI 侧手机工具都保留。
+  if (!PHONE_CONTROL_FROZEN) {
+    ctx.slots.inject('settings.section', () => ctx.slots.register({
+      name: 'settings.section',
+      id: 'android-phone-control',
+      order: 98,
+      label: () => tr('手机控制', 'Phone control'),
+    }, PhoneControlSection))
+  }
 
   // Linux 环境（实验性内部插件）**不由本文件注册**：该分区的唯一注册方是 vendored 的
   // dsh-linux-bootstrap 客户端插件（plugins/dsh-linux-bootstrap 的 client 条目，id 同为
