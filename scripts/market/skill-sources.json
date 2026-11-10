@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "categories": [
+    { "id": "documents", "title": { "en": "Documents", "zh": "文档处理" } },
+    { "id": "productivity", "title": { "en": "Productivity", "zh": "效率工具" } },
+    { "id": "writing", "title": { "en": "Writing", "zh": "写作" } }
+  ],
+  "skills": [
+    {
+      "id": "git-commit-message",
+      "name": "git-commit-message",
+      "title": { "en": "Git Commit Message", "zh": "Git 提交说明" },
+      "description": {
+        "en": "Write and review commit messages from the staged diff, with an imperative subject, a why-focused body and issue references.",
+        "zh": "根据暂存区差异撰写和审阅提交说明：祈使句主题、解释原因的主体与 issue 引用。"
+      },
+      "category": "writing",
+      "license": "MIT",
+      "local": true,
+      "source": {
+        "ref": "main",
+        "path": "market/skills/git-commit-message"
+      }
+    },
+    {
+      "id": "docx",
+      "name": "docx",
+      "title": { "en": "Word Documents", "zh": "Word 文档" },
+      "description": {
+        "en": "Create, read, edit and validate .docx and .dotx files, including tracked changes, comments, tables and document conversion.",
+        "zh": "创建、读取、编辑与校验 .docx/.dotx 文件，支持修订、批注、表格与文档转换。"
+      },
+      "category": "documents",
+      "license": "Apache-2.0",
+      "source": {
+        "owner": "anthropics",
+        "repo": "skills",
+        "ref": "2c5958ecac7cee2b583967a2c4981d0f4a75c579",
+        "path": "skills/docx"
+      }
+    },
+    {
+      "id": "define-goal",
+      "name": "define-goal",
+      "title": { "en": "Define a Goal", "zh": "定义目标" },
+      "description": {
+        "en": "Turn a fuzzy intention into a concrete, measurable goal with explicit success criteria before starting work.",
+        "zh": "在开始工作前把模糊意图变成具体、可度量且有明确成功标准的目标。"
+      },
+      "category": "productivity",
+      "license": "Apache-2.0",
+      "source": {
+        "owner": "openai",
+        "repo": "skills",
+        "ref": "49f948faa9258a0c61caceaf225e179651397431",
+        "path": "skills/.curated/define-goal"
+      }
+    },
+    {
+      "id": "screenshot",
+      "name": "screenshot",
+      "title": { "en": "System Screenshot", "zh": "系统截图" },
+      "description": {
+        "en": "Capture a desktop or window screenshot when the user asks for one or when tool-specific capture is unavailable.",
+        "zh": "在用户明确要求截图或专用截图能力不可用时，捕获桌面或窗口截图。"
+      },
+      "category": "productivity",
+      "license": "Apache-2.0",
+      "source": {
+        "owner": "openai",
+        "repo": "skills",
+        "ref": "49f948faa9258a0c61caceaf225e179651397431",
+        "path": "skills/.curated/screenshot"
+      }
+    }
+  ]
+}

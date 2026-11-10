@@ -1,0 +1,31 @@
+{
+  "name": "@dsh-android/dsh-skill-market",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Skill market server half: list, checksum-verified install, path-safe uninstall of agent skills under $DSH_HOME/skills.",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "dsh": {
+    "skillMarket": {
+      "owner": "yanqing7914",
+      "repo": "omni",
+      "ref": "main"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.5.0"
+  }
+}
