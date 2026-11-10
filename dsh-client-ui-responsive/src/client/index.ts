@@ -74,6 +74,8 @@ import { registerMarketplaceAction } from './marketplace/marketplace-entry.tsx'
 import { installAboutEntry } from './mobile/about-entry.ts'
 import { ABOUT_ENTRY_CSS } from './mobile/about-entry.css.ts'
 import { AboutSection } from './mobile/about-section.tsx'
+import { installUpdateEntry } from './mobile/update-entry.ts'
+import { UPDATE_ENTRY_CSS } from './mobile/update-entry.css.ts'
 import { GeneralSettings } from './general-settings/GeneralSettings.tsx'
 import { GENERAL_SETTINGS_CSS } from './general-settings/general-settings.css.ts'
 import { tr } from './i18n.ts'
@@ -447,6 +449,11 @@ export function apply(ctx: ClientContext): void {
   // 「设置 → 通用」底部那行版本改成「关于」入口，点开看壳与引擎两个版本。
   ctx.effect(() => injectStyle('about-entry', ABOUT_ENTRY_CSS), 'ui-responsive: about entry styles')
   ctx.effect(() => installAboutEntry(), 'ui-responsive: about entry')
+
+  // 应用更新入口（2026-11-10 用户定例）：设置里的分区已冻结，改为界面右下角在有新版时出现胶囊，
+  // 并在抽屉「更多」行右侧常驻一枚圆形按钮。桥缺席（桌面宿主）时两个入口都不渲染。
+  ctx.effect(() => injectStyle('update-entry', UPDATE_ENTRY_CSS), 'ui-responsive: update entry styles')
+  ctx.effect(() => installUpdateEntry(), 'ui-responsive: update entry')
 
   // 「关于」分区：入口在那行版本的位置（about-entry 点击时切到本分区）。
   ctx.slots.inject('settings.section', () => ctx.slots.register({

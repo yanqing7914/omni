@@ -368,13 +368,17 @@ describe('分区形态（从开发者选项提级）', () => {
     expect(button(host, 'check')).not.toBeNull()
   })
 
-  it('开发者选项只留指路，不再渲染同一组控件（同功能双实现是结构性根因）', async () => {
+  it('冻结后开发者选项不再指路；分区注册仍留在开关里（改回 false 即恢复）', async () => {
     const fs = await import('node:fs')
     const dev = fs.readFileSync('src/client/dev-section/DevSection.tsx', 'utf8')
     expect(dev, '开发者选项不得再内嵌 ApkUpdateRow').not.toContain('<ApkUpdateRow')
-    expect(dev).toContain('设置 → 应用更新')
+    // 2026-11-10 冻结：设置分区与右下角入口二选一，旧指路会把用户送去一个不存在的页面。
+    expect(dev).not.toContain('应用更新在「设置 → 应用更新」里')
     const index = fs.readFileSync('src/client/index.ts', 'utf8')
-    expect(index, '一级分区必须在场').toContain("id: 'android-apk-update'")
+    expect(index).toContain('APK_UPDATE_SECTION_FROZEN = true')
+    // 页面代码与注册都保留，只是被开关包住。
+    expect(index).toMatch(/if \(!APK_UPDATE_SECTION_FROZEN\) \{\s*ctx\.slots\.inject/)
+    expect(index, '分区代码仍在场').toContain("id: 'android-apk-update'")
     expect(index).toContain('ApkUpdateSection')
     // order 96：排在通知（97）/ 手机控制（98）/ 开发者选项（99）之前。
     expect(index).toMatch(/id: 'android-apk-update',\s*\n\s*order: 96,/)
