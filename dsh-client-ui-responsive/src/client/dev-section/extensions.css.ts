@@ -197,6 +197,32 @@ export const EXTENSIONS_CSS: string = `
   color: var(--dsw-alias-label-secondary);
 }
 
+/* 「可更新」既是标签也是按钮：沿用徽标外形，但给足可点高度并保留键盘焦点环。 */
+.dsh-ext-update {
+  min-height: 24px;
+  padding: 2px 8px;
+  background: transparent;
+  border-color: var(--dsw-alias-state-warn-primary);
+  color: var(--dsw-alias-state-warn-primary);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.dsh-ext-update:focus-visible {
+  outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-link));
+  outline-offset: 2px;
+}
+
+.dsh-ext-update:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dsh-ext-offline {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .dsh-ext-actions {
   display: flex;
   flex: none;

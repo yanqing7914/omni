@@ -634,6 +634,222 @@ describe('P6 两个 tab 互不干扰', () => {
 
 // ── E9 颜色与双语 ──────────────────────────────────────────────────────────
 
+// ── M7 可更新标签与离线提示 ────────────────────────────────────────────────
+
+/**
+ * 已安装夹具：
+ *  - docx：可卸载，是否可更新由参数决定；
+ *  - slides：可卸载但不可更新（M7-1 的反例）；
+ *  - pdf：内置（removable=false）且服务端声称可更新（M7-6 的反例）。
+ */
+function installedForUpdate(docxUpdate: boolean) {
+  return [
+    { id: 'docx', name: 'docx', description: '创建与编辑 Word 文档', source: 'user', path: '/skills/docx', removable: true, updateAvailable: docxUpdate },
+    { id: 'slides', name: 'slides', description: '制作演示文稿', source: 'user', path: '/skills/slides', removable: true, updateAvailable: false },
+    { id: 'pdf', name: 'pdf', description: '读取 PDF 文件', source: 'bundled', path: '/skills/pdf', removable: false, updateAvailable: true },
+  ]
+}
+
+function updateBadge(el: HTMLElement, id: string): HTMLElement | null {
+  return row(el, id).querySelector<HTMLElement>('[data-update-available="true"]')
+}
+
+async function unmountCurrent(): Promise<void> {
+  if (root !== undefined) {
+    await act(async () => { root!.unmount() })
+    root = undefined
+  }
+  host?.remove()
+  host = undefined
+}
+
+describe('M7-1 可更新标签', () => {
+  it('updateAvailable:true 的可卸载行显示「可更新」，false 的行不显示', async () => {
+    const fetchSpy = makeFetch({
+      '/api/skillmarket/installed': () => ({ body: installedForUpdate(true) }),
+      '/api/skillmarket/list': () => ({ body: emptyMarket() }),
+    })
+    vi.stubGlobal('fetch', fetchSpy.impl)
+    const el = await render()
+
+    expect(updateBadge(el, 'docx')).not.toBeNull()
+    expect(updateBadge(el, 'docx')!.textContent).toBe('可更新')
+    expect(updateBadge(el, 'slides')).toBeNull()
+    expect(row(el, 'slides').textContent).not.toContain('可更新')
+  })
+})
+
+describe('M7-2 覆盖安装请求', () => {
+  it('点「可更新」发出 overwrite:true；期间显示「更新中…」并禁用；重复点击不发第二次', async () => {
+    let releaseUpdate!: () => void
+    const updateGate = new Promise<void>((resolve) => { releaseUpdate = resolve })
+    const fetchSpy = makeFetch({
+      '/api/skillmarket/installed': () => ({ body: installedForUpdate(true) }),
+      '/api/skillmarket/list': () => ({ body: emptyMarket() }),
+      '/api/skillmarket/install': async () => {
+        await updateGate
+        return { body: { ok: true, status: 'installed', id: 'docx' } }
+      },
+    })
+    vi.stubGlobal('fetch', fetchSpy.impl)
+    const el = await render()
+
+    await act(async () => { buttonByText(row(el, 'docx'), '可更新').click() })
+    await settle(1)
+
+    const busyButton = buttonByText(row(el, 'docx'), '更新中…')
+    expect(busyButton.disabled).toBe(true)
+    // 同一时刻只允许一个写操作：其他行的按钮（卸载等）也被禁用。
+    expect(buttonByText(row(el, 'slides'), '卸载').disabled).toBe(true)
+
+    // 即使强行点被禁用的按钮，也不得发出第二个写请求。
+    await act(async () => { busyButton.click() })
+    const posts = fetchSpy.calls.filter((call) => call.url === '/api/skillmarket/install')
+    expect(posts).toHaveLength(1)
+    expect(JSON.parse(posts[0].body!)).toEqual({ id: 'docx', overwrite: true })
+
+    await act(async () => { releaseUpdate() })
+    await settle(8)
+  })
+})
+
+describe('M7-3 更新成功', () => {
+  it('成功后重新请求 installed 与 list，标签消失', async () => {
+    let installedCalls = 0
+    let listCalls = 0
+    const fetchSpy = makeFetch({
+      '/api/skillmarket/installed': () => {
+        installedCalls += 1
+        return { body: installedForUpdate(installedCalls === 1) }
+      },
+      '/api/skillmarket/list': () => {
+        listCalls += 1
+        return { body: emptyMarket() }
+      },
+      '/api/skillmarket/install': () => ({ body: { ok: true, status: 'installed', id: 'docx' } }),
+    })
+    vi.stubGlobal('fetch', fetchSpy.impl)
+    const el = await render()
+    expect(updateBadge(el, 'docx')).not.toBeNull()
+
+    await act(async () => { buttonByText(row(el, 'docx'), '可更新').click() })
+    await settle(8)
+
+    expect(installedCalls, '成功后必须重新 GET installed').toBe(2)
+    expect(listCalls, '成功后必须重新 GET list').toBe(2)
+    expect(updateBadge(el, 'docx')).toBeNull()
+    expect(row(el, 'docx').textContent).not.toContain('可更新')
+  })
+})
+
+describe('M7-4 更新失败', () => {
+  it('INTERNAL 显示对应文案，标签保留，按钮恢复可点', async () => {
+    let installedCalls = 0
+    const fetchSpy = makeFetch({
+      '/api/skillmarket/installed': () => { installedCalls += 1; return { body: installedForUpdate(true) } },
+      '/api/skillmarket/list': () => ({ body: emptyMarket() }),
+      '/api/skillmarket/install': () => ({ status: 500, body: { ok: false, error: 'boom', code: 'INTERNAL' } }),
+    })
+    vi.stubGlobal('fetch', fetchSpy.impl)
+    const el = await render()
+
+    await act(async () => { buttonByText(row(el, 'docx'), '可更新').click() })
+    await settle(8)
+
+    const failed = row(el, 'docx')
+    expect(failed.textContent).toContain('内部出错')
+    expect(failed.querySelector('[data-code="INTERNAL"]'), '原始码只进 data-code').not.toBeNull()
+    // 本地仍是旧版本，标签不消失，按钮恢复为「可更新」且可点。
+    expect(updateBadge(el, 'docx')).not.toBeNull()
+    expect(buttonByText(failed, '可更新').disabled).toBe(false)
+    expect(installedCalls, '失败不刷新已安装列表').toBe(1)
+  })
+})
+
+describe('M7-5 离线提示', () => {
+  it('stale:true 且带 savedAt 时在市场段顶部显示离线说明与日期', async () => {
+    const savedAt = new Date(2026, 5, 3, 12, 0, 0).getTime()
+    const fetchSpy = makeFetch({
+      '/api/skillmarket/installed': () => ({ body: [] }),
+      '/api/skillmarket/list': () => ({ body: { ...emptyMarket(), stale: true, savedAt } }),
+    })
+    vi.stubGlobal('fetch', fetchSpy.impl)
+    const el = await render()
+
+    const market = panel(el, 'skills').querySelector<HTMLElement>('[data-segment="market"]')!
+    const notice = market.querySelector<HTMLElement>('[data-state="stale"]')
+    expect(notice).not.toBeNull()
+    expect(notice!.textContent).toContain('离线，显示上次获取的清单')
+    expect(notice!.textContent).toContain('保存于 6月3日')
+  })
+
+  it('stale:false 或无该字段时不渲染任何离线节点', async () => {
+    for (const listBody of [{ ...emptyMarket(), stale: false }, emptyMarket()]) {
+      const fetchSpy = makeFetch({
+        '/api/skillmarket/installed': () => ({ body: [] }),
+        '/api/skillmarket/list': () => ({ body: listBody }),
+      })
+      vi.stubGlobal('fetch', fetchSpy.impl)
+      const el = await render()
+
+      const market = panel(el, 'skills').querySelector<HTMLElement>('[data-segment="market"]')!
+      expect(market.querySelector('[data-state="stale"]')).toBeNull()
+      expect(market.textContent).not.toContain('离线')
+
+      await unmountCurrent()
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    }
+  })
+})
+
+describe('M7-6 内置技能', () => {
+  it('removable:false 的内置技能即使服务端说可更新也不显示「可更新」', async () => {
+    const fetchSpy = makeFetch({
+      '/api/skillmarket/installed': () => ({ body: installedForUpdate(false) }),
+      '/api/skillmarket/list': () => ({ body: emptyMarket() }),
+    })
+    vi.stubGlobal('fetch', fetchSpy.impl)
+    const el = await render()
+
+    expect(updateBadge(el, 'pdf')).toBeNull()
+    expect(row(el, 'pdf').textContent).not.toContain('可更新')
+  })
+})
+
+describe('M7-7 文案与样式', () => {
+  it('新增文案全部经 tr() 双语；新增样式没有硬编码颜色', async () => {
+    const source = readFileSync('src/client/dev-section/extensions.tsx', 'utf8')
+    expect(source).toContain("tr('可更新', 'Updatable')")
+    expect(source).toContain("tr('更新中…', 'Updating…')")
+    expect(source).toContain("tr('离线，显示上次获取的清单', 'Offline. Showing the last fetched list.'")
+
+    const css = readFileSync('src/client/dev-section/extensions.css.ts', 'utf8')
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
+    expect(css).not.toMatch(/rgba?\(/)
+    expect(css).toContain('.dsh-ext-update')
+    expect(css).toContain('var(--dsw-alias-state-warn-primary)')
+
+    // 英文环境同一批文案必须切到英文，日期也换成英文短日期。
+    await unmountCurrent()
+    document.documentElement.lang = 'en'
+    const savedAt = new Date(2026, 5, 3, 12, 0, 0).getTime()
+    const fetchSpy = makeFetch({
+      '/api/skillmarket/installed': () => ({ body: installedForUpdate(true) }),
+      '/api/skillmarket/list': () => ({ body: { ...emptyMarket(), stale: true, savedAt } }),
+    })
+    vi.stubGlobal('fetch', fetchSpy.impl)
+    const el = await render()
+
+    expect(updateBadge(el, 'docx')!.textContent).toBe('Updatable')
+    const market = panel(el, 'skills').querySelector<HTMLElement>('[data-segment="market"]')!
+    expect(market.textContent).toContain('Offline. Showing the last fetched list')
+    expect(market.textContent).toContain('saved Jun 3')
+  })
+})
+
+// ── E9 颜色与双语 ──────────────────────────────────────────────────────────
+
 describe('E9 颜色与双语', () => {
   it('新增 TSX 无硬编码颜色；中文字面量都作为 tr() 的第一参数', () => {
     const source = readFileSync('src/client/dev-section/extensions.tsx', 'utf8')
