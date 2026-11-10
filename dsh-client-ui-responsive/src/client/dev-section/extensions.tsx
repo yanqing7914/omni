@@ -300,8 +300,10 @@ function parseMarket(payload: unknown): MarketList {
 function formatSavedAt(savedAt: number): string {
   const date = new Date(savedAt)
   if (Number.isNaN(date.getTime())) return ''
-  if (isEnglish()) return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  return String(date.getMonth() + 1) + tr('月', '/') + String(date.getDate()) + tr('日', '')
+  // 两种语言都交给 Intl：省掉「月/日」这类只有中文一半的拼接字面量（i18n 门禁会判「文案缺英文」）。
+  return isEnglish()
+    ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
 }
 
 function normalizePlugin(raw: unknown): PluginItem | null {
