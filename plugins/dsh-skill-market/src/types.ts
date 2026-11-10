@@ -79,6 +79,8 @@ export interface InstalledSkill {
   source: InstalledSource
   path: string
   removable: boolean
+  /** True when the market entry's file inventory differs from the directory on disk. */
+  updateAvailable: boolean
 }
 
 /** Minimal response surface the installer needs; lets tests inject a fake. */

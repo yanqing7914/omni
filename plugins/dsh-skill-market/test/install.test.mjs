@@ -157,7 +157,8 @@ test('S7: a hanging fetch fails inside the budget and cleans staging', async () 
     })
 
     const started = Date.now()
-    await assert.rejects(() => service.install('slow'), /time budget|INSTALL_TIMEOUT/)
+    // 主地址超时后按设计回落到镜像；假 fetch 没有镜像文件，于是镜像 404 成为最终失败。
+    await assert.rejects(() => service.install('slow'), /time budget|INSTALL_TIMEOUT|download failed/i)
     const elapsed = Date.now() - started
     assert.ok(elapsed < 2000, `failed in ${elapsed}ms`)
     const entries = await listDir(join(home, 'skills'))

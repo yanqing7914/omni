@@ -1,11 +1,12 @@
 import { readFileSync, realpathSync, statSync } from 'node:fs'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { SkillMarketError } from './errors.js'
-import { assertKebabId } from './paths.js'
-import { assertAllowedUrl, parseManifest } from './manifest.js'
+import { assertKebabId, randomToken } from './paths.js'
+import { assertAllowedUrl, mirrorUrlFor, parseManifest } from './manifest.js'
 import { scanInstalledRoots } from './installed.js'
-import { installSkill, uninstallSkill } from './installer.js'
+import { installSkill, inventoriesMatch, inventory, uninstallSkill } from './installer.js'
 import type { InstallerOptions } from './installer.js'
 import type {
   FetchLike,
@@ -13,6 +14,7 @@ import type {
   InstalledSkill,
   LoggerLike,
   MarketCategory,
+  MarketSkill,
   ParsedManifest,
   RejectedSkill,
 } from './types.js'
@@ -57,8 +59,13 @@ export interface MarketListResult {
     installed: boolean
     installedSource?: 'user' | 'bundled'
     removable?: boolean
+    updateAvailable: boolean
   }>
   rejected: RejectedSkill[]
+  /** Present only when the network failed and a previously saved manifest was served. */
+  stale?: boolean
+  /** Epoch milliseconds of the disk manifest that produced a stale result. */
+  savedAt?: number
 }
 
 export interface SkillMarketService {
@@ -152,16 +159,47 @@ function readPackageMarketConfig(): MarketConfig {
  * 清单地址候选（按顺序尝试）。
  *
  * 主分支可能还没有清单（开发期先合到 dev），而发布版读的是 main；所以 main 读不到时回落到 dev，
- * 免得开发期的包市场永远是空的。显式配置的 URL 只有一个候选，不做回落（配置就是真源）。
+ * 免得开发期的包市场永远是空的。每个地址都有 jsDelivr 镜像，主入口连接失败/超时/5xx 时换镜像。
+ * 显式配置的 URL 只有它自己（加可推导出的镜像），不做 dev 回落（配置就是真源）。
  */
 export function resolveMarketUrls(options: Pick<ServiceOptions, 'marketUrl' | 'owner' | 'repo' | 'ref'>): string[] {
   const primary = resolveMarketUrl(options)
-  if (typeof options.marketUrl === 'string' && options.marketUrl !== '') return [primary]
-  if (process.env.DSH_SKILL_MARKET_URL !== undefined && process.env.DSH_SKILL_MARKET_URL.trim() !== '') return [primary]
+  const appendWithMirror = (urls: string[], url: string): void => {
+    urls.push(url)
+    const mirror = mirrorUrlFor(url)
+    if (mirror !== undefined) urls.push(mirror)
+  }
+
+  if (typeof options.marketUrl === 'string' && options.marketUrl !== '') {
+    const urls: string[] = []
+    appendWithMirror(urls, primary)
+    return dedupeUrls(urls)
+  }
+  if (process.env.DSH_SKILL_MARKET_URL !== undefined && process.env.DSH_SKILL_MARKET_URL.trim() !== '') {
+    const urls: string[] = []
+    appendWithMirror(urls, primary)
+    return dedupeUrls(urls)
+  }
   const ref = options.ref ?? process.env.DSH_SKILL_MARKET_REF ?? readPackageMarketConfig().ref
-  if (ref !== 'main') return [primary]
-  const fallback = primary.replace('/main/market/skills.json', '/dev/market/skills.json')
-  return fallback === primary ? [primary] : [primary, fallback]
+  const urls: string[] = []
+  appendWithMirror(urls, primary)
+  if (ref === 'main') {
+    const fallback = primary.replace('/main/market/skills.json', '/dev/market/skills.json')
+    if (fallback !== primary) appendWithMirror(urls, fallback)
+  }
+  return dedupeUrls(urls)
+}
+
+/** Keep the first occurrence of each URL so candidate order stays meaningful. */
+function dedupeUrls(urls: string[]): string[] {
+  const seen = new Set<string>()
+  const unique: string[] = []
+  for (const url of urls) {
+    if (seen.has(url)) continue
+    seen.add(url)
+    unique.push(url)
+  }
+  return unique
 }
 
 export function resolveMarketUrl(options: Pick<ServiceOptions, 'marketUrl' | 'owner' | 'repo' | 'ref'>): string {
@@ -194,7 +232,7 @@ function withDeadline<T>(work: Promise<T>, ms: number, controller: AbortControll
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
       controller.abort()
-      reject(new SkillMarketError('MARKET_UNAVAILABLE', 'market manifest request timed out'))
+      reject(new SkillMarketError('MARKET_UNAVAILABLE', 'market manifest request timed out', { retryable: true }))
     }, Math.max(1, ms))
   })
   return Promise.race([work, timeout]).finally(() => {
@@ -202,17 +240,26 @@ function withDeadline<T>(work: Promise<T>, ms: number, controller: AbortControll
   })
 }
 
-async function fetchManifest(url: string, fetchImpl: FetchLike, timeoutMs: number): Promise<ParsedManifest> {
+interface FetchedManifest {
+  parsed: ParsedManifest
+  /** The untouched JSON document, so the disk cache round-trips the same catalogue. */
+  raw: unknown
+  sourceUrl: string
+}
+
+async function fetchManifest(url: string, fetchImpl: FetchLike, timeoutMs: number): Promise<FetchedManifest> {
   const controller = new AbortController()
-  const work = (async (): Promise<ParsedManifest> => {
+  const work = (async (): Promise<FetchedManifest> => {
     let response
     try {
       response = await fetchImpl(url, { signal: controller.signal, headers: { accept: 'application/json' } })
     } catch {
-      throw new SkillMarketError('MARKET_UNAVAILABLE', 'market manifest is unreachable')
+      // 连接失败/超时属于传输层问题，换镜像或 dev 分支还有机会；4xx 是权威答复，不再换。
+      throw new SkillMarketError('MARKET_UNAVAILABLE', 'market manifest is unreachable', { retryable: true })
     }
     if (!response.ok) {
-      throw new SkillMarketError('MARKET_UNAVAILABLE', `market manifest responded HTTP ${response.status}`)
+      const retryable = response.status === 404 || response.status >= 500
+      throw new SkillMarketError('MARKET_UNAVAILABLE', `market manifest responded HTTP ${response.status}`, { retryable })
     }
     let text: string
     try {
@@ -220,17 +267,101 @@ async function fetchManifest(url: string, fetchImpl: FetchLike, timeoutMs: numbe
         ? await response.text()
         : Buffer.from(await response.arrayBuffer()).toString('utf8')
     } catch {
-      throw new SkillMarketError('MARKET_UNAVAILABLE', 'market manifest body is unreadable')
+      throw new SkillMarketError('MARKET_UNAVAILABLE', 'market manifest body is unreadable', { retryable: true })
     }
-    let parsed: unknown
+    let raw: unknown
     try {
-      parsed = JSON.parse(text)
+      raw = JSON.parse(text)
     } catch {
       throw new SkillMarketError('MARKET_UNAVAILABLE', 'market manifest is not valid JSON')
     }
-    return parseManifest(parsed)
+    return { parsed: parseManifest(raw), raw, sourceUrl: url }
   })()
   return withDeadline(work, timeoutMs, controller)
+}
+
+interface DiskManifestCache {
+  savedAt: number
+  sourceUrl: string
+  manifest: unknown
+}
+
+interface LoadedManifest {
+  parsed: ParsedManifest
+  cached: boolean
+  stale?: boolean
+  savedAt?: number
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** Read and validate the on-disk manifest; any structural problem means "no cache". */
+async function readDiskManifest(path: string): Promise<{ parsed: ParsedManifest; savedAt: number } | null> {
+  let text: string
+  try {
+    text = await readFile(path, 'utf8')
+  } catch {
+    return null
+  }
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (!isRecord(value)) return null
+  const savedAt = value.savedAt
+  if (typeof savedAt !== 'number' || !Number.isFinite(savedAt)) return null
+  if (typeof value.sourceUrl !== 'string') return null
+  try {
+    return { parsed: parseManifest(value.manifest), savedAt }
+  } catch {
+    return null
+  }
+}
+
+/** Atomically replace the cache; a write failure never fails the caller. */
+async function writeDiskManifest(path: string, record: DiskManifestCache, logger?: LoggerLike): Promise<void> {
+  const temp = `${path}.${randomToken()}.tmp`
+  try {
+    await mkdir(dirname(path), { recursive: true })
+    await writeFile(temp, JSON.stringify(record), { mode: 0o600 })
+    await rename(temp, path)
+  } catch (error) {
+    await rm(temp, { force: true }).catch(() => {})
+    const message = error instanceof Error ? error.message : String(error)
+    logger?.warn?.(`skill market cache write failed: ${message}`)
+  }
+}
+
+/**
+ * Compare one installed copy against its market entry.
+ *
+ * A bundled copy never reports an update: the engine ships it and the user
+ * cannot replace it. Any inspection failure degrades to `false` so one broken
+ * directory cannot fail the whole route.
+ */
+async function computeUpdateAvailable(
+  entry: InstalledSkill,
+  marketSkill: MarketSkill | undefined,
+  logger?: LoggerLike,
+): Promise<boolean> {
+  if (entry.source === 'bundled') return false
+  if (marketSkill === undefined) return false
+  try {
+    const actual = await inventory(entry.path)
+    if (actual === null) {
+      logger?.warn?.(`skill market: cannot inventory ${entry.id}; treating it as up to date`)
+      return false
+    }
+    return !inventoriesMatch(marketSkill.files, actual)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger?.warn?.(`skill market: update check failed for ${entry.id}: ${message}`)
+    return false
+  }
 }
 
 /**
@@ -265,40 +396,56 @@ export function createService(options: ServiceOptions = {}): SkillMarketService 
     concurrency: options.concurrency ?? DEFAULT_CONCURRENCY,
   }
 
-  let cached: { at: number; parsed: ParsedManifest } | undefined
-  let inflight: Promise<ParsedManifest> | undefined
+  const logger = options.logger
+  const cachePath = join(dshHome, 'market', 'cache.json')
 
-  const loadManifest = async (): Promise<{ parsed: ParsedManifest; cached: boolean }> => {
+  let cached: (LoadedManifest & { at: number }) | undefined
+  let inflight: Promise<LoadedManifest> | undefined
+
+  const loadManifest = async (): Promise<LoadedManifest> => {
     const at = now()
     if (cached !== undefined && at - cached.at < cacheTtlMs) {
-      return { parsed: cached.parsed, cached: true }
+      return {
+        parsed: cached.parsed,
+        cached: true,
+        ...(cached.stale === true ? { stale: true, savedAt: cached.savedAt } : {}),
+      }
     }
     if (inflight === undefined) {
-      inflight = (async () => {
+      inflight = (async (): Promise<LoadedManifest> => {
         let lastError: unknown
         for (const url of marketUrls) {
           try {
-            return await fetchManifest(url, fetchImpl, manifestTimeoutMs)
+            const fetched = await fetchManifest(url, fetchImpl, manifestTimeoutMs)
+            await writeDiskManifest(
+              cachePath,
+              { savedAt: now(), sourceUrl: fetched.sourceUrl, manifest: fetched.raw },
+              logger,
+            )
+            return { parsed: fetched.parsed, cached: false }
           } catch (error) {
             lastError = error
-            // 只有「这一份清单不存在」才换下一个候选；网络不可达/超时说明整条链路都不通，继续试没有意义。
-            const notFound = error instanceof SkillMarketError && /HTTP 404/.test(error.message)
-            if (!notFound) break
+            // 只有传输层失败（连接/超时/5xx）和 404 才换下一个候选；清单内容损坏换地址也不会变好。
+            if (!(error instanceof SkillMarketError) || error.retryable !== true) break
           }
         }
-        throw lastError
+        const disk = await readDiskManifest(cachePath)
+        if (disk !== null) {
+          logger?.warn?.('skill market manifest is unavailable; serving the last cached copy')
+          return { parsed: disk.parsed, cached: true, stale: true, savedAt: disk.savedAt }
+        }
+        throw lastError ?? new SkillMarketError('MARKET_UNAVAILABLE', 'market manifest is unavailable')
       })()
-        .then((parsed) => {
-          cached = { at: now(), parsed }
-          return parsed
+        .then((result) => {
+          cached = { at: now(), ...result }
+          return result
         })
         .finally(() => {
           inflight = undefined
         })
     }
     try {
-      const parsed = await inflight
-      return { parsed, cached: false }
+      return await inflight
     } catch (error) {
       const known = error instanceof SkillMarketError
         ? error
@@ -311,31 +458,49 @@ export function createService(options: ServiceOptions = {}): SkillMarketService 
   }
 
   const list = async (): Promise<MarketListResult> => {
-    const { parsed, cached: fromCache } = await loadManifest()
+    const loaded = await loadManifest()
     const installed = await scanInstalledRoots(userRoot, bundledRoot)
     const installedById = new Map<string, InstalledSkill>()
     for (const entry of installed) {
       // A user copy shadows the bundled copy of the same id.
       if (!installedById.has(entry.id) || entry.source === 'user') installedById.set(entry.id, entry)
     }
-    const skills = parsed.manifest.skills.map((skill) => {
+    const skills = await Promise.all(loaded.parsed.manifest.skills.map(async (skill) => {
       const hit = installedById.get(skill.id)
+      const updateAvailable = hit === undefined ? false : await computeUpdateAvailable(hit, skill, logger)
       return {
         ...skill,
         installed: hit !== undefined,
         ...(hit === undefined ? {} : { installedSource: hit.source, removable: hit.removable }),
+        updateAvailable,
       }
-    })
+    }))
     return {
       ok: true,
-      cached: fromCache,
-      categories: parsed.manifest.categories,
+      cached: loaded.cached,
+      ...(loaded.stale === true ? { stale: true, savedAt: loaded.savedAt } : {}),
+      categories: loaded.parsed.manifest.categories,
       skills,
-      rejected: parsed.rejected,
+      rejected: loaded.parsed.rejected,
     }
   }
 
-  const installed = async (): Promise<InstalledSkill[]> => scanInstalledRoots(userRoot, bundledRoot)
+  const installed = async (): Promise<InstalledSkill[]> => {
+    const entries = await scanInstalledRoots(userRoot, bundledRoot)
+    let manifest: ParsedManifest | undefined
+    try {
+      manifest = (await loadManifest()).parsed
+    } catch (error) {
+      // 更新判定是附加信息，清单不可达不应让「已安装列表」整条失败。
+      const message = error instanceof Error ? error.message : String(error)
+      logger?.warn?.(`skill market: manifest unavailable for update checks: ${message}`)
+    }
+    const byId = new Map(manifest?.manifest.skills.map((skill) => [skill.id, skill]) ?? [])
+    return Promise.all(entries.map(async (entry) => ({
+      ...entry,
+      updateAvailable: await computeUpdateAvailable(entry, byId.get(entry.id), logger),
+    })))
+  }
 
   const install = async (id: string, installOptions: { overwrite?: boolean } = {}): Promise<InstallResult> => {
     const safeId = assertKebabId(id)
