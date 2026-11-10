@@ -25,6 +25,11 @@
         "rowId": "dsh-undo-savepoint",
         "pkg": "dsh-undo-savepoint",
         "why": "Third-party vendor copy 0.4.9 has no @deepseek-ai/dsh* peer; upstream fail-open is not a compatibility test. Runtime behavior remains subject to the registered Android undo patches and future artifact/runtime acceptance."
+      },
+      {
+        "rowId": "skill-market",
+        "pkg": "@dsh-android/dsh-skill-market",
+        "why": "自研插件：只用 node: 内置模块与宿主注入的 connection/webServer 能力，不声明 @deepseek-ai/dsh* peer；运行时行为由 check-api-route-auth 与插件单测覆盖，真机路由验收待做。"
       }
     ],
     "exemptions": [],
@@ -135,6 +140,11 @@
       "id": "llm-subscriptions",
       "pkg": "dsh-plugin-subscriptions",
       "repo": "vendor/dsh-plugin-subscriptions"
+    },
+    {
+      "id": "skill-market",
+      "pkg": "@dsh-android/dsh-skill-market",
+      "repo": "plugins/dsh-skill-market"
     }
   ],
   "symbols": [

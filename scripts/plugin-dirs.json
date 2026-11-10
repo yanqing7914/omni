@@ -10,7 +10,8 @@
     "plugins/dsh-android-file-open",
     "plugins/dsh-android-browser",
     "plugins/dsh-android-vdisplay",
-    "plugins/dsh-session-delete"
+    "plugins/dsh-session-delete",
+    "plugins/dsh-skill-market"
   ],
   "externals": [
     "vendor/dshmarketplace-plugin",

@@ -241,6 +241,12 @@
 - id: product-analytics
   disabled: true
 
+# 技能市场（2026-11-10）：@dsh-android/dsh-skill-market——设置页「扩展」的技能 tab；
+# 清单在仓库 market/skills.json，安装落 ~/.dsh/skills/<id>/，引擎的文件系统技能提供方热生效。
+- insert:
+    - id: skill-market
+      name: '@dsh-android/dsh-skill-market'
+
 # 删除对话（issue #493）：会话行菜单「删除对话」+ 受鉴权 host 路由 /api/session-delete。
 # 引擎没有 session/delete RPC，插件负责先卸载内存会话，再删磁盘目录；运行中的会话拒绝删除。
 - insert:

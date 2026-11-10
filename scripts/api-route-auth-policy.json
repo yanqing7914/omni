@@ -45,6 +45,10 @@
     {
       "source": "plugins/dsh-session-delete/src/index.js",
       "expected": 3
+    },
+    {
+      "source": "plugins/dsh-skill-market/src/index.ts",
+      "expected": 4
     }
   ],
   "dynamicPathExpressions": [
@@ -439,6 +443,50 @@
       "endpointSource": "plugins/dsh-session-delete/src/index.js",
       "access": "protected",
       "authMarker": "authorize(req, res, ctx)",
+      "authCallMarker": "authorize(req, res, ctx)"
+    },
+    {
+      "id": "skill-market-list",
+      "path": "/api/skillmarket/list",
+      "kind": "exact",
+      "registrationSource": "plugins/dsh-skill-market/src/index.ts",
+      "registration": "path: '/api/skillmarket/list',",
+      "endpointSource": "plugins/dsh-skill-market/src/index.ts",
+      "access": "protected",
+      "authMarker": "if (!authorize(req, res, ctx)) return",
+      "authCallMarker": "authorize(req, res, ctx)"
+    },
+    {
+      "id": "skill-market-installed",
+      "path": "/api/skillmarket/installed",
+      "kind": "exact",
+      "registrationSource": "plugins/dsh-skill-market/src/index.ts",
+      "registration": "path: '/api/skillmarket/installed',",
+      "endpointSource": "plugins/dsh-skill-market/src/index.ts",
+      "access": "protected",
+      "authMarker": "if (!authorize(req, res, ctx)) return",
+      "authCallMarker": "authorize(req, res, ctx)"
+    },
+    {
+      "id": "skill-market-install",
+      "path": "/api/skillmarket/install",
+      "kind": "exact",
+      "registrationSource": "plugins/dsh-skill-market/src/index.ts",
+      "registration": "path: '/api/skillmarket/install',",
+      "endpointSource": "plugins/dsh-skill-market/src/index.ts",
+      "access": "protected",
+      "authMarker": "if (!authorize(req, res, ctx)) return",
+      "authCallMarker": "authorize(req, res, ctx)"
+    },
+    {
+      "id": "skill-market-uninstall",
+      "path": "/api/skillmarket/uninstall",
+      "kind": "exact",
+      "registrationSource": "plugins/dsh-skill-market/src/index.ts",
+      "registration": "path: '/api/skillmarket/uninstall',",
+      "endpointSource": "plugins/dsh-skill-market/src/index.ts",
+      "access": "protected",
+      "authMarker": "if (!authorize(req, res, ctx)) return",
       "authCallMarker": "authorize(req, res, ctx)"
     }
   ],

@@ -3647,9 +3647,6 @@
     "scripts/check-snapshot-builder-output.mjs:156": [
       "const writesTar = text.includes(\"join(OUT_DIR, 'snapshot.tar.xz')\")"
     ],
-    "scripts/check-tool-output-schema.mjs:153": [
-      "{"
-    ],
     "scripts/check-tool-output-schema.mjs:7": [
       "//   1) lib/ 时效检查：任一 src/*.ts 比 lib/*.js 新只是**触发**，真伪由重建哈希裁决"
     ],
@@ -3895,6 +3892,9 @@
     ],
     "NotifyStore.kt:421": [
       "heartbeat(app, trigger, offset, len)"
+    ],
+    "scripts/check-tool-output-schema.mjs:154": [
+      "{"
     ]
   },
   "symbols": {
