@@ -14,6 +14,12 @@ import type {
 const REPO_PART = /^[A-Za-z0-9_.-]+$/
 const SHA256 = /^[a-f0-9]{64}$/
 
+/** The only origins downloads may use: GitHub raw plus its jsDelivr mirror. */
+export const ALLOWED_DOWNLOAD_ORIGINS = [
+  'https://raw.githubusercontent.com/',
+  'https://cdn.jsdelivr.net/',
+] as const
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -172,8 +178,8 @@ export function parseManifest(value: unknown): ParsedManifest {
   return { manifest, rejected }
 }
 
-/** Absolute raw.githubusercontent URL for one file of one market entry. */
-export function rawFileUrl(source: SkillSource, filePath: string): string {
+/** Validate the pieces of a source reference that end up in a download path. */
+function assertSourceReference(source: SkillSource, filePath: string): void {
   assertSafeRelativePath(filePath, 'file path')
   assertSafeSourcePath(source.path)
   if (
@@ -186,6 +192,11 @@ export function rawFileUrl(source: SkillSource, filePath: string): string {
   ) {
     throw new SkillMarketError('URL_NOT_ALLOWED', 'source location is not a plain GitHub reference')
   }
+}
+
+/** Absolute raw.githubusercontent URL for one file of one market entry. */
+export function rawFileUrl(source: SkillSource, filePath: string): string {
+  assertSourceReference(source, filePath)
   const url = new URL(
     `https://raw.githubusercontent.com/${source.owner}/${source.repo}/${source.ref}/${source.path}/${filePath}`,
   )
@@ -194,8 +205,57 @@ export function rawFileUrl(source: SkillSource, filePath: string): string {
 }
 
 /**
- * Hard download whitelist: HTTPS, no credentials, no non-default port, and the
- * exact raw.githubusercontent.com host.
+ * jsDelivr mirror of the same file.
+ *
+ * jsDelivr serves GitHub content through `gh/<owner>/<repo>@<ref>/<path>`, so it
+ * is a second entry point to identical bytes rather than a different source.
+ */
+export function mirrorFileUrl(source: SkillSource, filePath: string): string {
+  assertSourceReference(source, filePath)
+  const url = new URL(
+    `https://cdn.jsdelivr.net/gh/${source.owner}/${source.repo}@${source.ref}/${source.path}/${filePath}`,
+  )
+  assertAllowedUrl(url.href)
+  return url.href
+}
+
+/** Primary and mirror URLs, in the order they should be attempted. */
+export function fileUrls(source: SkillSource, filePath: string): string[] {
+  return [rawFileUrl(source, filePath), mirrorFileUrl(source, filePath)]
+}
+
+/**
+ * Mirror URL for an already-built raw.githubusercontent URL.
+ *
+ * The first three path segments of a raw URL are owner/repo/ref. A ref that
+ * itself contains slashes is ambiguous in this scheme; market refs are branch
+ * names (`main` / `dev`), and an ambiguous URL simply yields a mirror that
+ * points at the wrong path, which then fails as a normal 404.
+ */
+export function mirrorUrlFor(href: string): string | undefined {
+  let url: URL
+  try {
+    url = new URL(href)
+  } catch {
+    return undefined
+  }
+  if (url.hostname !== 'raw.githubusercontent.com') return undefined
+  const segments = url.pathname.split('/').filter((segment) => segment !== '')
+  if (segments.length < 4) return undefined
+  const [owner, repo, ref, ...rest] = segments
+  const mirror = `https://cdn.jsdelivr.net/gh/${owner}/${repo}@${ref}/${rest.join('/')}`
+  try {
+    assertAllowedUrl(mirror)
+  } catch {
+    return undefined
+  }
+  return mirror
+}
+
+/**
+ * Hard download whitelist: HTTPS, no credentials, no non-default port, and one
+ * of the two exact origins above. Subdomains and lookalike hosts (`raw.githubusercontent.com.evil.test`)
+ * are refused because the hostname comparison is exact.
  */
 export function assertAllowedUrl(href: string): void {
   let url: URL
@@ -204,14 +264,18 @@ export function assertAllowedUrl(href: string): void {
   } catch {
     throw new SkillMarketError('URL_NOT_ALLOWED', 'download URL is not a valid URL')
   }
+  const allowedOrigin = ALLOWED_DOWNLOAD_ORIGINS.find((origin) => href.startsWith(origin))
   if (
     url.protocol !== 'https:'
-    || url.hostname !== 'raw.githubusercontent.com'
+    || allowedOrigin === undefined
+    || url.origin + '/' !== allowedOrigin
     || url.port !== ''
     || url.username !== ''
     || url.password !== ''
-    || !href.startsWith('https://raw.githubusercontent.com/')
   ) {
-    throw new SkillMarketError('URL_NOT_ALLOWED', 'downloads are restricted to https://raw.githubusercontent.com/')
+    throw new SkillMarketError(
+      'URL_NOT_ALLOWED',
+      'downloads are restricted to https://raw.githubusercontent.com/ and https://cdn.jsdelivr.net/',
+    )
   }
 }

@@ -1,0 +1,54 @@
+---
+name: taobao-app-shopping
+description: Use when the user wants to search products, compare prices, read item details, or manage the cart inside the Taobao or Tmall Android app on this phone. Also use for checking orders and delivery status. Never complete payment or submit an order without asking the user first.
+user-invocable: true
+---
+
+# 淘宝 App 购物助手
+
+通过**手机上的淘宝 App**完成浏览类操作。用户已经登录的账号就是唯一的账号，不要尝试登录、
+切换账号或读取密码。
+
+## 先确认能力
+
+设备工具默认可能被收起。开始时先调用 `android_capabilities` 解锁 `phone` 组，再执行后续步骤。
+如果无障碍服务没有打开，`android_ui_tree` 会返回空或失败——这时直接告诉用户：
+「需要到系统设置 → 无障碍里打开 Omni 的服务」，不要改用截图硬猜坐标。
+
+## 基本流程
+
+1. `android_app_launch` 启动淘宝（包名 `com.taobao.taobao`，天猫是 `com.tmall.wireless`）。
+2. `android_ui_tree` 读当前界面。**先看树，再动手**：能按文字/描述定位就不要点坐标。
+3. 需要点时用 `android_ui_click`（传节点或文字）；树里没有可用节点时，才用
+   `android_screenshot` 看图后按归一化坐标点（`nx`/`ny`），并在回复里说明这是一次坐标点击。
+4. 输入用 `android_ui_input`；搜索流程是「点搜索框 → 输入关键词 → 点『搜索』」。
+5. 列表页：读出商品标题、价格、销量、店铺。价格要连同「券后价 / 到手价」一起说明，
+   不要只报一个大数字。
+6. 商品详情页：确认规格（颜色、尺码、版本）后再谈价格；规格不同价格会变。
+7. 加购物车：`加入购物车` 之后**回读购物车**确认数量与规格，再说「已加入」。
+
+## 必须停下来问用户的事
+
+以下动作**一律不得自动执行**，必须先复述「买什么、多少钱、几件、收货地址」并得到明确同意：
+
+- 提交订单、结算
+- 付款、免密支付、分期
+- 修改收货地址、手机号
+- 申请退款、确认收货
+- 删除订单、批量删除购物车
+
+用户只让你「看看」「比比价」「加购」时，做到那一步为止，不要顺手往下点。
+
+## 风控与异常
+
+- 出现滑块、验证码、「环境异常」提示时，停下来把屏幕情况告诉用户，让他手动完成，
+  不要尝试绕过。
+- 连续操作要有节奏：每步之间等界面稳定（读树成功或截图内容变化），不要连点。
+- 页面长时间不变、或点击后没有任何变化，换一种定位方式重试一次；仍失败就如实报告，
+  不要重复盲点。
+
+## 表达要求
+
+- 报价一律带单位与来源页面（列表页 / 详情页 / 购物车），不要估算。
+- 不确定的地方直说「页面没显示」，不要编造参数、销量或评价。
+- 一次只推进一个明确的目标；用户没说清买哪一款时，先给 2–3 个候选让他选。

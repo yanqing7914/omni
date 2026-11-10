@@ -54,6 +54,8 @@ async function discoverRoot(root: string, source: 'user' | 'bundled'): Promise<I
         source,
         path: join(root, entry.name),
         removable: source === 'user',
+        // The service fills this in after comparing against the market manifest.
+        updateAvailable: false,
       })
       continue
     }
@@ -71,6 +73,8 @@ async function discoverRoot(root: string, source: 'user' | 'bundled'): Promise<I
       source,
       path,
       removable: source === 'user',
+      // The service fills this in after comparing against the market manifest.
+      updateAvailable: false,
     })
   }
 

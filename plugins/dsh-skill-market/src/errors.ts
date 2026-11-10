@@ -30,13 +30,27 @@ export class SkillMarketError extends Error {
   readonly code: SkillMarketErrorCode
   readonly status: number
   readonly cached?: boolean
+  /**
+   * True only for transport-level failures (connection refused, timeout, 5xx).
+   * The mirror fallback retries those; a 404 is a definitive answer and must
+   * not be retried against the other entry point of the same content.
+   */
+  readonly retryable?: boolean
+  /** Upstream HTTP status when the failure came from a response. */
+  readonly httpStatus?: number
 
-  constructor(code: SkillMarketErrorCode, message: string, options: { status?: number; cached?: boolean } = {}) {
+  constructor(
+    code: SkillMarketErrorCode,
+    message: string,
+    options: { status?: number; cached?: boolean; retryable?: boolean; httpStatus?: number } = {},
+  ) {
     super(message)
     this.name = 'SkillMarketError'
     this.code = code
     this.status = options.status ?? STATUS_BY_CODE[code]
     if (options.cached !== undefined) this.cached = options.cached
+    if (options.retryable !== undefined) this.retryable = options.retryable
+    if (options.httpStatus !== undefined) this.httpStatus = options.httpStatus
   }
 }
 

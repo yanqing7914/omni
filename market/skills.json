@@ -9,10 +9,24 @@
       }
     },
     {
+      "id": "media",
+      "title": {
+        "en": "Images",
+        "zh": "图像"
+      }
+    },
+    {
       "id": "productivity",
       "title": {
         "en": "Productivity",
         "zh": "效率工具"
+      }
+    },
+    {
+      "id": "shopping",
+      "title": {
+        "en": "Shopping",
+        "zh": "购物"
       }
     },
     {
@@ -416,6 +430,60 @@
       ]
     },
     {
+      "id": "image-cleanup-checklist",
+      "name": "image-cleanup-checklist",
+      "title": {
+        "en": "Image Cleanup Checklist",
+        "zh": "图片整理清单"
+      },
+      "description": {
+        "en": "Review a photo or product image and produce a concrete must-fix / should-fix list before it is published.",
+        "zh": "检查照片或商品图，给出必须改/建议改的具体清单，含裁剪、色偏、合规检查。"
+      },
+      "category": "media",
+      "license": "MIT",
+      "source": {
+        "owner": "yanqing7914",
+        "repo": "omni",
+        "ref": "main",
+        "path": "market/skills/image-cleanup-checklist"
+      },
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "3e2babc3759ab0d41a8282be9eaa0b9df8e75a65d0907acc6d84d0eab2ff75fc",
+          "size": 1577
+        }
+      ]
+    },
+    {
+      "id": "image-style-prompt",
+      "name": "image-style-prompt",
+      "title": {
+        "en": "Image Restyle Prompt",
+        "zh": "图片风格改写提示词"
+      },
+      "description": {
+        "en": "Turn a restyle request into a structured prompt for an image tool, with subject preservation and negative prompts.",
+        "zh": "把「换成某种风格」写成可直接粘贴的结构化提示词，含主体保持项与负面提示。"
+      },
+      "category": "media",
+      "license": "MIT",
+      "source": {
+        "owner": "yanqing7914",
+        "repo": "omni",
+        "ref": "main",
+        "path": "market/skills/image-style-prompt"
+      },
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "b417d9d4698e419140ea86b75a06c5b620de89342589074b09fd2ee6e5fe8534",
+          "size": 2031
+        }
+      ]
+    },
+    {
       "id": "screenshot",
       "name": "screenshot",
       "title": {
@@ -489,6 +557,33 @@
           "path": "scripts/take_screenshot.py",
           "sha256": "56eeabe2dac5d23915b9a0fb57a07431fad2d310c5444f60f71f09299899232b",
           "size": 19659
+        }
+      ]
+    },
+    {
+      "id": "taobao-app-shopping",
+      "name": "taobao-app-shopping",
+      "title": {
+        "en": "Taobao App Shopping",
+        "zh": "淘宝 App 购物"
+      },
+      "description": {
+        "en": "Search, compare and inspect products inside the Taobao or Tmall Android app, and manage the cart. Never pays or submits an order without your confirmation.",
+        "zh": "在手机淘宝/天猫 App 里搜索、比价、看详情与管理购物车；下单和付款前一定先问你。"
+      },
+      "category": "shopping",
+      "license": "MIT",
+      "source": {
+        "owner": "yanqing7914",
+        "repo": "omni",
+        "ref": "main",
+        "path": "market/skills/taobao-app-shopping"
+      },
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "6f5712bdee069da4a1eb6e8356a0cffd4353a086a6017ab2b88734859c286508",
+          "size": 3010
         }
       ]
     }
