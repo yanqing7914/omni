@@ -277,7 +277,11 @@ internal class RuntimeExtractProgress {
     if (estimatedTotalMinutes == null && remaining is Eta.Seconds) {
       estimatedTotalMinutes = ceilMinutes(eta.elapsed / 1000 + remaining.seconds)
     }
-    return ExtractProgressView(true, pct, formatPercent(pct), formatEta(remaining, english))
+    // 还在估算时不给 etaLabel：进度行只应该出现「已知道的数字」。
+    // 旧实现把「正在估算剩余时间…」也塞进进度行，于是同一行在百分比后挂着一段无信息量的字，
+    // 用户读到的仍然是「不知道」。现在缺估计就只留百分比。
+    val etaLabel = (remaining as? Eta.Seconds)?.let { formatEta(it, english) }
+    return ExtractProgressView(true, pct, formatPercent(pct), etaLabel)
   }
 
   /** 流程报告解压完成后调用：百分比到 100，剩余时间不再显示。 */
@@ -301,12 +305,26 @@ internal fun formatEta(eta: Eta, english: Boolean): String = when (eta) {
   Eta.Estimating -> UiText.t(english, "正在估算剩余时间…", "Estimating time left…")
   is Eta.Seconds -> when {
     eta.seconds <= 0L -> UiText.t(english, "即将完成", "Almost done")
-    eta.seconds < 60L -> UiText.t(english, "剩余不到 1 分钟", "Less than 1 min left")
+    eta.seconds < 60L -> UiText.t(english, "预计还需不到 1 分钟", "Less than 1 min left")
     else -> {
       val minutes = ceilMinutes(eta.seconds)
-      UiText.t(english, "剩余约 $minutes 分钟", "About $minutes min left")
+      UiText.t(english, "预计还需 $minutes 分钟", "About $minutes min left")
     }
   }
+}
+
+/**
+ * 进度区唯一文本行的拼法（确定态）。
+ *
+ * 形态由用户选定：`42% · 预计还需 3 分钟`。剩余时间缺席时只显示百分比，**不留分隔符**——
+ * 「42% · 」这种尾随符号会让用户以为后面还有内容没加载出来。
+ * 不确定态没有可信数字，返回 null，由渲染层改显示阶段句。
+ */
+internal fun formatProgressLine(view: ExtractProgressView): String? {
+  if (!view.determinate) return null
+  val pct = view.percentLabel ?: return null
+  val eta = view.etaLabel
+  return if (eta.isNullOrBlank()) pct else pct + " · " + eta
 }
 
 /** 首装说明里那段时长（由模型格式化，是说明文案里唯一允许出现数字的地方）。 */
@@ -327,12 +345,12 @@ internal fun runtimeExtractTitle(kind: RuntimeInstallKind, english: Boolean): St
 internal fun runtimeExtractHint(kind: RuntimeInstallKind, durationSegment: String?, english: Boolean): String = when (kind) {
   RuntimeInstallKind.FIRST_INSTALL -> if (durationSegment != null) {
     UiText.t(english,
-      "首次安装需要解压运行时，只有这一次，$durationSegment。请保持应用在前台。",
-      "The first launch unpacks the runtime, only this once, $durationSegment. Keep the app open.")
+      "首次安装需要准备运行时，只有这一次，$durationSegment。",
+      "The first launch prepares the runtime, only this once, $durationSegment.")
   } else {
     UiText.t(english,
-      "首次安装需要解压运行时，只有这一次，需要几分钟。请保持应用在前台。",
-      "The first launch unpacks the runtime, only this once; it takes a few minutes. Keep the app open.")
+      "首次安装需要准备运行时，只有这一次。",
+      "The first launch prepares the runtime, only this once.")
   }
   RuntimeInstallKind.REFRESH -> UiText.t(english,
     "应用已更新，正在更新运行时，你的数据会保留。请保持应用在前台。",
