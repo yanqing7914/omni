@@ -57,7 +57,7 @@ const restPart = orig.slice(nl + 1)
 const JUNCTION_DIRS = [
   'app', 'docs', 'plugins', 'vendor', 'webpages', 'release', 'dsh-client-ui-responsive',
   'dsh-host-web-compat', 'dsh-shell-termux', 'base', 'final-acceptance', 'qrcode', 'gradle',
-  'keystore', 'LICENSES', '.github',
+  'keystore', 'LICENSES', '.github', 'market',
 ]
 
 /** 把 `rel` 目录整棵复制到 stage（跳过 node_modules / .git）。 */
