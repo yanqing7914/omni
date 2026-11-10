@@ -27,6 +27,7 @@ interface InstalledSkill {
   source: 'user' | 'bundled'
   path?: string
   removable: boolean
+  updateAvailable: boolean
 }
 
 interface BilingualText {
@@ -43,6 +44,7 @@ interface MarketSkill {
   installed?: boolean
   installedSource?: 'user' | 'bundled'
   removable?: boolean
+  updateAvailable?: boolean
 }
 
 interface MarketCategory {
@@ -53,6 +55,10 @@ interface MarketCategory {
 interface MarketList {
   categories: MarketCategory[]
   skills: MarketSkill[]
+  /** 服务端用了缓存清单（离线兜底）时为 true。 */
+  stale: boolean
+  /** 缓存写入时间（毫秒时间戳）；没有缓存或服务端未带时为空。 */
+  savedAt?: number
 }
 
 interface PluginItem {
@@ -79,7 +85,7 @@ type LoadKind = 'loading' | 'ok' | 'error'
 /** 一次只允许一个写操作的状态；`id` 为空表示空闲。 */
 interface BusyOperation {
   id: string
-  kind: 'install' | 'uninstall'
+  kind: 'install' | 'uninstall' | 'update'
 }
 
 // ── 文案与错误码 ───────────────────────────────────────────────────────────
@@ -228,6 +234,8 @@ function normalizeInstalled(raw: unknown): InstalledSkill | null {
     path: typeof record.path === 'string' ? record.path : undefined,
     // 卸载入口只认服务端明确的 removable=true；缺字段按不可卸载处理。
     removable: record.removable === true,
+    // 更新入口只认服务端明确的 true；缺字段按「没有新版」处理，避免误报。
+    updateAvailable: record.updateAvailable === true,
   }
 }
 
@@ -257,6 +265,7 @@ function normalizeMarketSkill(raw: unknown): MarketSkill | null {
     installed: record.installed === true,
     installedSource: record.installedSource === 'bundled' ? 'bundled' : (record.installedSource === 'user' ? 'user' : undefined),
     removable: record.removable === true,
+    updateAvailable: record.updateAvailable === true,
   }
 }
 
@@ -273,7 +282,28 @@ function parseMarket(payload: unknown): MarketList {
       return [{ id: category.id, title: asRecord(category.title) as BilingualText | undefined }]
     })
     : []
-  return { categories, skills }
+  return {
+    categories,
+    skills,
+    // 只有明确的 true 才算离线清单；字段缺失表示服务端正常在线返回。
+    stale: record.stale === true,
+    savedAt: typeof record.savedAt === 'number' && Number.isFinite(record.savedAt) ? record.savedAt : undefined,
+  }
+}
+
+/**
+ * 缓存时间 → 展示用短日期（中文「M月D日」，英文「Mon D」）。
+ *
+ * 为什么自己拼：服务端只给毫秒时间戳，直接 toLocaleString 会带上年份与时分，
+ * 在设置页这一行里过长；这里只要「哪天的清单」这一层信息。
+ */
+function formatSavedAt(savedAt: number): string {
+  const date = new Date(savedAt)
+  if (Number.isNaN(date.getTime())) return ''
+  // 两种语言都交给 Intl：省掉「月/日」这类只有中文一半的拼接字面量（i18n 门禁会判「文案缺英文」）。
+  return isEnglish()
+    ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
 }
 
 function normalizePlugin(raw: unknown): PluginItem | null {
@@ -339,7 +369,7 @@ function SkillsPanel() {
   const [installed, setInstalled] = useState<InstalledSkill[]>([])
   const [installedKind, setInstalledKind] = useState<LoadKind>('loading')
   const [installedError, setInstalledError] = useState<Notice | null>(null)
-  const [market, setMarket] = useState<MarketList>({ categories: [], skills: [] })
+  const [market, setMarket] = useState<MarketList>({ categories: [], skills: [], stale: false })
   const [marketKind, setMarketKind] = useState<LoadKind>('loading')
   const [marketError, setMarketError] = useState<Notice | null>(null)
   const [query, setQuery] = useState('')
@@ -381,8 +411,9 @@ function SkillsPanel() {
     }
   }, [])
 
-  const loadMarket = useCallback(async (): Promise<void> => {
-    setMarketKind('loading')
+  const loadMarket = useCallback(async (silent = false): Promise<void> => {
+    // 更新成功后的静默刷新不把整段切回「加载中」，避免已展示的市场列表闪一下。
+    if (!silent) setMarketKind('loading')
     try {
       const response = await fetch('/api/skillmarket/list', { credentials: 'same-origin', cache: 'no-store' })
       const payload = await readJson(response)
@@ -436,6 +467,38 @@ function SkillsPanel() {
       setBusy(null)
     }
   }, [busy, clearRowError, loadInstalled, setRowError])
+
+  /**
+   * 覆盖安装：服务端把「更新」建模成同一条 install 路由 + overwrite。
+   *
+   * 成功后必须同时重读 installed 与 list：标签挂在 installed 行上，而市场条目
+   * 也带 updateAvailable，只刷一边会让两段对同一个技能给出矛盾状态。
+   */
+  const updateSkill = useCallback(async (skill: InstalledSkill): Promise<void> => {
+    if (busy !== null) return
+    setBusy({ id: skill.id, kind: 'update' })
+    clearRowError(skill.id)
+    try {
+      const response = await fetch('/api/skillmarket/install', {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: skill.id, overwrite: true }),
+      })
+      const payload = await readJson(response)
+      if (!response.ok) {
+        // 失败时保留「可更新」：本地仍是旧版本，用户可再点一次。
+        setRowError(skill.id, noticeFromResponse(payload, response.status, tr('更新技能', 'Updating the skill')))
+        return
+      }
+      await Promise.all([loadInstalled(true), loadMarket(true)])
+    } catch {
+      setRowError(skill.id, networkNotice())
+    } finally {
+      setBusy(null)
+    }
+  }, [busy, clearRowError, loadInstalled, loadMarket, setRowError])
 
   const uninstallSkill = useCallback(async (skill: InstalledSkill): Promise<void> => {
     if (busy !== null) return
@@ -555,6 +618,7 @@ function SkillsPanel() {
             {installedFiltered.map((skill) => {
               const rowError = rowErrors[skill.id]
               const rowBusy = busy !== null && busy.id === skill.id
+              const updating = rowBusy && busy?.kind === 'update'
               return (
                 <li className="dsh-ext-row" key={skill.id} data-skill-id={skill.id}>
                   <div className="dsh-ext-main">
@@ -563,6 +627,18 @@ function SkillsPanel() {
                       <span className="dsh-ext-badge" data-source={skill.source}>
                         {sourceBadge(skill.source)}
                       </span>
+                      {/* 内置技能由应用包管理，覆盖安装没有意义，因此只在可卸载技能上给更新入口。 */}
+                      {skill.removable && skill.updateAvailable && (
+                        <button
+                          type="button"
+                          className="dsh-ext-badge dsh-ext-update"
+                          data-update-available="true"
+                          disabled={busy !== null}
+                          onClick={() => { void updateSkill(skill) }}
+                        >
+                          {updating ? tr('更新中…', 'Updating…') : tr('可更新', 'Updatable')}
+                        </button>
+                      )}
                     </div>
                     {skill.description !== '' && <p className="dsh-ext-desc">{skill.description}</p>}
                     {rowError !== undefined && (
@@ -616,6 +692,15 @@ function SkillsPanel() {
 
       <section className="dsh-ext-segment" aria-label={tr('市场', 'Market')} data-segment="market">
         <h3 className="dsh-ext-segment-title">{tr('市场', 'Market')}</h3>
+        {marketKind === 'ok' && market.stale && (
+          <p className="dsh-dev-hint dsh-ext-offline" data-state="stale">
+            {market.savedAt === undefined
+              ? tr('离线，显示上次获取的清单', 'Offline. Showing the last fetched list.')
+              : tr('离线，显示上次获取的清单（保存于 ', 'Offline. Showing the last fetched list (saved ')
+                + formatSavedAt(market.savedAt)
+                + tr('）', ')')}
+          </p>
+        )}
         {marketKind === 'loading' && (
           <p className="dsh-dev-hint" data-state="loading">{tr('加载中…', 'Loading…')}</p>
         )}
