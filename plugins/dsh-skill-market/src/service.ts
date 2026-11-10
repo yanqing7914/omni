@@ -148,6 +148,22 @@ function readPackageMarketConfig(): MarketConfig {
 }
 
 /** Resolve the market manifest URL, allowing env/config overrides for deployment. */
+/**
+ * 清单地址候选（按顺序尝试）。
+ *
+ * 主分支可能还没有清单（开发期先合到 dev），而发布版读的是 main；所以 main 读不到时回落到 dev，
+ * 免得开发期的包市场永远是空的。显式配置的 URL 只有一个候选，不做回落（配置就是真源）。
+ */
+export function resolveMarketUrls(options: Pick<ServiceOptions, 'marketUrl' | 'owner' | 'repo' | 'ref'>): string[] {
+  const primary = resolveMarketUrl(options)
+  if (typeof options.marketUrl === 'string' && options.marketUrl !== '') return [primary]
+  if (process.env.DSH_SKILL_MARKET_URL !== undefined && process.env.DSH_SKILL_MARKET_URL.trim() !== '') return [primary]
+  const ref = options.ref ?? process.env.DSH_SKILL_MARKET_REF ?? readPackageMarketConfig().ref
+  if (ref !== 'main') return [primary]
+  const fallback = primary.replace('/main/market/skills.json', '/dev/market/skills.json')
+  return fallback === primary ? [primary] : [primary, fallback]
+}
+
 export function resolveMarketUrl(options: Pick<ServiceOptions, 'marketUrl' | 'owner' | 'repo' | 'ref'>): string {
   if (typeof options.marketUrl === 'string' && options.marketUrl !== '') {
     assertAllowedUrl(options.marketUrl)
@@ -237,7 +253,7 @@ export function createService(options: ServiceOptions = {}): SkillMarketService 
   const now = options.now ?? Date.now
   const cacheTtlMs = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS
   const manifestTimeoutMs = options.manifestTimeoutMs ?? DEFAULT_MANIFEST_TIMEOUT_MS
-  const marketUrl = resolveMarketUrl(options)
+  const marketUrls = resolveMarketUrls(options)
 
   const installerOptions: InstallerOptions = {
     userRoot,
@@ -258,7 +274,20 @@ export function createService(options: ServiceOptions = {}): SkillMarketService 
       return { parsed: cached.parsed, cached: true }
     }
     if (inflight === undefined) {
-      inflight = fetchManifest(marketUrl, fetchImpl, manifestTimeoutMs)
+      inflight = (async () => {
+        let lastError: unknown
+        for (const url of marketUrls) {
+          try {
+            return await fetchManifest(url, fetchImpl, manifestTimeoutMs)
+          } catch (error) {
+            lastError = error
+            // 只有「这一份清单不存在」才换下一个候选；网络不可达/超时说明整条链路都不通，继续试没有意义。
+            const notFound = error instanceof SkillMarketError && /HTTP 404/.test(error.message)
+            if (!notFound) break
+          }
+        }
+        throw lastError
+      })()
         .then((parsed) => {
           cached = { at: now(), parsed }
           return parsed

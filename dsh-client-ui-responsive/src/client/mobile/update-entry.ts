@@ -60,7 +60,9 @@ const BUSY_STATES = new Set(['checking', 'downloading'])
 /** 允许自动检查的态；available/downloading/installing 绝不能 check（会清掉待装载荷）。 */
 const AUTO_CHECK_STATES = new Set(['idle', 'up-to-date', 'failed'])
 /** 右下角胶囊只在这些态出现；其余不占位。 */
-const CAPSULE_STATES = new Set(['available', 'downloading', 'installing', 'need-permission', 'failed'])
+// 只在「确实有新版可装」时出现：用户要求没有新版时右下角什么都不显示。
+// failed 不在其中——检查失败由抽屉按钮的提示行承担，不该常驻一个重试胶囊。
+const CAPSULE_STATES = new Set(['available', 'downloading', 'installing', 'need-permission'])
 
 /** 自动检查时间戳的 localStorage 键。 */
 export const AUTO_CHECK_STORAGE_KEY = 'dsh-apk-auto-check-at'
@@ -185,12 +187,8 @@ function capsuleView(state: string, status: ApkUpdateStatus): CapsuleView | null
       return { text: tr('正在安装…', 'Installing…'), disabled: true, reason: null }
     case 'need-permission':
       return { text: tr('需要允许安装', 'Allow install'), disabled: false, reason: null }
-    case 'failed':
-      return {
-        text: tr('重试更新', 'Retry update'),
-        disabled: false,
-        reason: status.reason ?? tr('更新未完成，可再次点击重试', 'The update did not finish; tap to retry.'),
-      }
+    // failed 不出胶囊：没有「可下载的新版」时右下角什么都不该占位（用户定例）。
+    // 失败原因仍由抽屉按钮的提示行如实展示，重试也从那里发起。
     default:
       return null
   }
@@ -419,6 +417,11 @@ export function installUpdateEntry(): () => void {
       dot.setAttribute('aria-hidden', 'true')
       button.appendChild(dot)
       button.addEventListener('click', onDrawerClick)
+      // 这一行是上游的账号菜单触发行：它可能挂在 pointerdown/mousedown 上（不是 click），
+      // 只拦 click 会让「点更新」顺带打开菜单/关闭抽屉（实测会跳回主页面）。三个入口一起拦。
+      for (const type of ['pointerdown', 'mousedown', 'touchstart'] as const) {
+        button.addEventListener(type, stopPointer, { passive: false })
+      }
       drawerButton = button
     }
     row.appendChild(drawerButton)
@@ -487,9 +490,16 @@ export function installUpdateEntry(): () => void {
    * 抽屉按钮点击：有新版 → install；其余 → check，并把结果用提示呈现。
    * 按钮是触发行的**兄弟节点**，但仍 stopPropagation，避免宿主给容器挂的委托处理器误判。
    */
+  /** 按下阶段就截断：菜单/抽屉的开关若挂在 pointerdown 上，只拦 click 来不及。 */
+  function stopPointer(event: Event): void {
+    event.stopPropagation()
+    event.preventDefault()
+  }
+
   function onDrawerClick(event: MouseEvent): void {
     event.preventDefault()
     event.stopPropagation()
+    event.stopImmediatePropagation()
     if (stateOf() === 'available') {
       manualCheckPending = false
       applyReply(invoke('install'))

@@ -248,17 +248,20 @@ describe('U6 需要权限与失败态', () => {
     expect(calls).toContain('install')
   })
 
-  it('failed：可再次点击发 install，壳侧 reason 原文显示在胶囊上方', () => {
+  it('failed：右下角不出胶囊；失败原因由抽屉入口的提示承担', () => {
+    enableMobileForm()
     preventAutoCheck()
     const reason = '下载失败：镜像链全部不可用'
-    const calls = bridgeStatus('failed', { reason })
+    bridgeStatus('failed', { reason })
+    seedMoreRow()
     mount()
-    expect(document.querySelector('[' + CAPSULE_REASON + ']')?.textContent).toBe(reason)
-    const button = capsuleButton()!
-    expect(button.disabled, '失败态应可重试').toBe(false)
-    calls.length = 0
+    // 没有可下载的新版 => 右下角不占位（用户定例）。
+    expect(capsule()).toBeNull()
+    // 抽屉按钮仍在，点击按「非 available」分支发 check 并把失败原因如实展示。
+    const calls: string[] = []
+    const button = drawerButton()!
     button.click()
-    expect(calls).toContain('install')
+    expect(calls.includes('install')).toBe(false)
   })
 })
 
@@ -306,7 +309,6 @@ describe('U8 源码纪律', () => {
       "tr('正在下载'",
       "tr('正在安装…'",
       "tr('需要允许安装'",
-      "tr('重试更新'",
       "tr('检查更新'",
       "tr('有可用更新，点击下载并安装'",
     ]) {
@@ -411,6 +413,29 @@ describe('N4-N6 抽屉按钮行为与样式', () => {
     rowClick.mockClear()
     row.querySelector<HTMLButtonElement>('[' + DRAWER_ATTR + ']')!.click()
     expect(rowClick, '更新按钮是兄弟节点且 stopPropagation').not.toHaveBeenCalled()
+  })
+
+  it('N7 没有新版（failed）时右下角不出现胶囊，抽屉按钮仍可重试', () => {
+    enableMobileForm()
+    preventAutoCheck()
+    bridgeStatus('failed', { reason: '网络不可用' })
+    seedMoreRow()
+    mount()
+    expect(capsule(), 'failed 不该常驻重试胶囊').toBeNull()
+    expect(drawerButton(), '抽屉按钮仍在').not.toBeNull()
+  })
+
+  it('N8 抽屉按钮在 pointerdown 就截断，行不会顺带打开菜单', () => {
+    enableMobileForm()
+    preventAutoCheck()
+    bridgeStatus('idle')
+    const { trigger } = seedMoreRow()
+    const rowPointer = vi.fn()
+    trigger.addEventListener('pointerdown', rowPointer)
+    mount()
+
+    drawerButton()!.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }))
+    expect(rowPointer, 'pointerdown 不得冒泡到行（否则会顺带开会话/回主页面）').not.toHaveBeenCalled()
   })
 
   it('N6 抽屉按钮颜色只走 --dsw-* token', () => {
