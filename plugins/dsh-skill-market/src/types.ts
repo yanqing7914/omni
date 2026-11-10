@@ -13,6 +13,21 @@ export interface Bilingual {
   zh?: string
 }
 
+/**
+ * 技能可选的能力依赖。只做这两个：无障碍与 Shizuku 是壳侧能可靠判定的通道；
+ * 其它能力没有稳定的本地判据，声明了也只会变成假入口。
+ */
+export type SkillRequirement = 'a11y' | 'shizuku'
+
+/** 解析时允许保留的能力依赖闭集；未知值丢弃而不是拒绝整条清单。 */
+export const SKILL_REQUIREMENTS: readonly SkillRequirement[] = ['a11y', 'shizuku']
+
+/** 一条「条目仍可用、但有字段被降级」的解析警告。 */
+export interface ManifestWarning {
+  id: string
+  reasons: string[]
+}
+
 /** A display category from the market manifest. */
 export interface MarketCategory {
   id: string
@@ -46,6 +61,8 @@ export interface MarketSkill {
   description: Bilingual
   category: string
   license: string
+  /** 安装/使用前必须具备的本地能力；缺省为空数组。 */
+  requires: SkillRequirement[]
   source: SkillSource
   files: SkillFile[]
 }
@@ -66,6 +83,8 @@ export interface RejectedSkill {
 export interface ParsedManifest {
   manifest: MarketManifest
   rejected: RejectedSkill[]
+  /** 条目未被拒绝、但有可选字段被降级的原因（如未知的 requires 值）。 */
+  warnings: ManifestWarning[]
 }
 
 /** Where an installed skill came from. */
@@ -79,6 +98,8 @@ export interface InstalledSkill {
   source: InstalledSource
   path: string
   removable: boolean
+  /** 从市场清单按 id 取到的能力依赖；清单里没有该 id 时为空数组。 */
+  requires: SkillRequirement[]
   /** True when the market entry's file inventory differs from the directory on disk. */
   updateAvailable: boolean
 }

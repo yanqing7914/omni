@@ -29,6 +29,8 @@ const DEFAULT_SOURCES = join(REPO_ROOT, 'scripts', 'market', 'skill-sources.json
 const DEFAULT_OUTPUT = join(REPO_ROOT, 'market', 'skills.json')
 const KEBAB = /^[a-z0-9][a-z0-9-]{0,63}$/
 const SHA256 = /^[a-f0-9]{64}$/
+/** 技能允许声明的能力依赖；与 plugins/dsh-skill-market/src/types.ts 的闭集一致。 */
+const KNOWN_REQUIREMENTS = new Set(['a11y', 'shizuku'])
 const DOWNLOAD_CONCURRENCY = 8
 const DOWNLOAD_TIMEOUT_MS = 30_000
 
@@ -75,6 +77,29 @@ function safeRelativePath(value, label) {
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
+}
+
+/**
+ * 读取可选的 `requires`。
+ *
+ * 与运行时的解析口径一致：未知值/非数组只告警并丢弃，不让整条技能构建失败。
+ * 生成脚本仍要出声，否则源清单里的拼写错误会静默消失。
+ */
+function readRequires(value, id) {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    console.warn(`skill ${id}: requires must be an array; declaration dropped`)
+    return []
+  }
+  const requires = []
+  for (const item of value) {
+    if (typeof item !== 'string' || !KNOWN_REQUIREMENTS.has(item)) {
+      console.warn(`skill ${id}: unknown requires value ${JSON.stringify(item)}; dropped`)
+      continue
+    }
+    if (!requires.includes(item)) requires.push(item)
+  }
+  return requires
 }
 
 /** Extract owner/repo from the repository's origin remote. */
@@ -308,6 +333,7 @@ export async function buildManifest(options = {}) {
     for (const file of files) {
       if (!SHA256.test(file.sha256)) fail(`skill ${id} produced an invalid sha256`)
     }
+    const requires = readRequires(raw.requires, id)
     skills.push({
       id,
       name,
@@ -319,6 +345,8 @@ export async function buildManifest(options = {}) {
         return category
       })(),
       license: typeof raw.license === 'string' && raw.license.trim() !== '' ? raw.license.trim() : fail(`skill ${id}.license is required`),
+      // 空声明不写字段，保持清单与旧生成结果逐字节一致。
+      ...(requires.length === 0 ? {} : { requires }),
       source,
       files,
     })

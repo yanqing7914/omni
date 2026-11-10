@@ -20,6 +20,9 @@ import { noticeDataAttrs, type Notice } from '../user-copy.ts'
 
 // ── 接口形态（以服务端实际返回为准） ───────────────────────────────────────
 
+/** 技能可声明的能力依赖闭集；与服务端 `SkillRequirement` 保持一致。 */
+type SkillRequirement = 'a11y' | 'shizuku'
+
 interface InstalledSkill {
   id: string
   name: string
@@ -27,6 +30,7 @@ interface InstalledSkill {
   source: 'user' | 'bundled'
   path?: string
   removable: boolean
+  requires: SkillRequirement[]
   updateAvailable: boolean
 }
 
@@ -44,6 +48,7 @@ interface MarketSkill {
   installed?: boolean
   installedSource?: 'user' | 'bundled'
   removable?: boolean
+  requires: SkillRequirement[]
   updateAvailable?: boolean
 }
 
@@ -213,6 +218,21 @@ function readBilingual(value: unknown): string[] {
   return out
 }
 
+/**
+ * 只保留服务端允许的两个值。
+ *
+ * 服务端解析已经过滤过一遍；页面再收窄一次，避免旧/新服务端形态不一致时把一个
+ * 不认识的依赖当成「必须满足」而误禁用安装。
+ */
+function normalizeRequires(value: unknown): SkillRequirement[] {
+  if (!Array.isArray(value)) return []
+  const requires: SkillRequirement[] = []
+  for (const item of value) {
+    if ((item === 'a11y' || item === 'shizuku') && !requires.includes(item)) requires.push(item)
+  }
+  return requires
+}
+
 /** 按当前语言取展示文本（中文优先作为默认语言）。 */
 function displayBilingual(value: unknown): string {
   const texts = readBilingual(value)
@@ -234,6 +254,7 @@ function normalizeInstalled(raw: unknown): InstalledSkill | null {
     path: typeof record.path === 'string' ? record.path : undefined,
     // 卸载入口只认服务端明确的 removable=true；缺字段按不可卸载处理。
     removable: record.removable === true,
+    requires: normalizeRequires(record.requires),
     // 更新入口只认服务端明确的 true；缺字段按「没有新版」处理，避免误报。
     updateAvailable: record.updateAvailable === true,
   }
@@ -265,6 +286,7 @@ function normalizeMarketSkill(raw: unknown): MarketSkill | null {
     installed: record.installed === true,
     installedSource: record.installedSource === 'bundled' ? 'bundled' : (record.installedSource === 'user' ? 'user' : undefined),
     removable: record.removable === true,
+    requires: normalizeRequires(record.requires),
     updateAvailable: record.updateAvailable === true,
   }
 }
@@ -344,6 +366,56 @@ function sourceBadge(source: 'user' | 'bundled' | undefined): string {
   return tr('市场', 'Market')
 }
 
+/** 一次能力回读的结论。`unknown` 表示桥或字段读不到，按满足处理但不显示任何「已满足」标记。 */
+type RequirementState = 'met' | 'unmet' | 'unknown'
+
+function requirementBadgeLabel(requirement: SkillRequirement): string {
+  return requirement === 'a11y'
+    ? tr('需要开启无障碍', 'Needs accessibility')
+    : tr('需要开启 Shizuku', 'Needs Shizuku')
+}
+
+/** 读桥返回的 JSON；非字符串、解析失败或缺方法都归为「读不到」。 */
+function readBridgeRecord(read: (() => string) | undefined): Record<string, unknown> | null {
+  if (typeof read !== 'function') return null
+  try {
+    const raw = read()
+    if (typeof raw !== 'string') return null
+    return asRecord(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 判定一项能力依赖。
+ *
+ * 只有明确的 `enabled:false` / `granted:false` 才算不满足：桥缺席（桌面宿主）或字段
+ * 读不到时必须放行，不能把宿主能力差异误报成用户的配置问题。`unknown` 不渲染绿标，
+ * 所以「没读到」也不会被展示成「已满足」。
+ */
+function readRequirement(requirement: SkillRequirement): RequirementState {
+  const bridge = window.androidBridge
+  if (bridge === undefined) return 'unknown'
+  const record = requirement === 'a11y'
+    ? readBridgeRecord(bridge.a11yStatus)
+    : readBridgeRecord(bridge.shizukuStatus)
+  if (record === null) return 'unknown'
+  const flag = requirement === 'a11y' ? record.enabled : record.granted
+  if (flag === false) return 'unmet'
+  return flag === true ? 'met' : 'unknown'
+}
+
+/** 打开系统侧开启入口；桥缺席时按钮仍可点，状态以下一次回读为准。 */
+function openRequirementSettings(requirement: SkillRequirement): void {
+  try {
+    if (requirement === 'a11y') window.androidBridge?.openA11ySettings?.()
+    else window.androidBridge?.openShizukuManager?.()
+  } catch {
+    /* 桌面宿主没有桥；不把异常冒到页面 */
+  }
+}
+
 /** 本地搜索：名称、中英标题、中英简介都参与匹配。 */
 function matchesQuery(query: string, parts: ReadonlyArray<string | undefined>): boolean {
   if (query === '') return true
@@ -365,7 +437,7 @@ async function readJson(response: Response): Promise<unknown> {
  *
  * 组件始终保持挂载（切到插件 tab 只隐藏），因此搜索词、滚动位置和已加载状态在 tab 之间不丢。
  */
-function SkillsPanel() {
+function SkillsPanel({ active }: { active: boolean }) {
   const [installed, setInstalled] = useState<InstalledSkill[]>([])
   const [installedKind, setInstalledKind] = useState<LoadKind>('loading')
   const [installedError, setInstalledError] = useState<Notice | null>(null)
@@ -378,6 +450,41 @@ function SkillsPanel() {
   const [rowErrors, setRowErrors] = useState<Record<string, Notice>>({})
   // 卸载成功后市场回包里的 `installed` 仍是旧值：用本地集合压住，直到下次整表刷新。
   const [locallyRemoved, setLocallyRemoved] = useState<ReadonlySet<string>>(new Set())
+  // 依赖状态挂在组件上而不是行上：一次回读服务所有行，且能被「回到设置页」重新触发。
+  const [requirementStates, setRequirementStates] = useState<Record<SkillRequirement, RequirementState>>({
+    a11y: 'unknown',
+    shizuku: 'unknown',
+  })
+
+  const refreshRequirements = useCallback((): void => {
+    setRequirementStates({
+      a11y: readRequirement('a11y'),
+      shizuku: readRequirement('shizuku'),
+    })
+  }, [])
+
+  useEffect(() => {
+    refreshRequirements()
+  }, [refreshRequirements])
+
+  // 从系统设置页回来时重新判定：点击「去开启」只是把用户送走，真正的变化发生在别处。
+  useEffect(() => {
+    const onFocus = (): void => { refreshRequirements() }
+    const onVisibility = (): void => {
+      if (document.visibilityState === 'visible') refreshRequirements()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [refreshRequirements])
+
+  // 两个 tab 常驻挂载：切回技能 tab 也算一次「回到本页」，需要重新回读。
+  useEffect(() => {
+    if (active) refreshRequirements()
+  }, [active, refreshRequirements])
 
   const clearRowError = useCallback((id: string): void => {
     setRowErrors((prev) => {
@@ -627,6 +734,16 @@ function SkillsPanel() {
                       <span className="dsh-ext-badge" data-source={skill.source}>
                         {sourceBadge(skill.source)}
                       </span>
+                      {/* 已安装但依赖暂不满足：技能还在，只是用不了；只提示，不加额外按钮。 */}
+                      {skill.requires.map((requirement) => requirementStates[requirement] === 'unmet' ? (
+                        <span
+                          key={requirement}
+                          className="dsh-ext-badge dsh-ext-require"
+                          data-requires={requirement}
+                        >
+                          {requirementBadgeLabel(requirement)}
+                        </span>
+                      ) : null)}
                       {/* 内置技能由应用包管理，覆盖安装没有意义，因此只在可卸载技能上给更新入口。 */}
                       {skill.removable && skill.updateAvailable && (
                         <button
@@ -733,6 +850,9 @@ function SkillsPanel() {
                 const source = hit?.source ?? skill.installedSource ?? (skill.installed === true ? 'user' : undefined)
                 const rowError = rowErrors[skill.id]
                 const rowBusy = busy !== null && busy.id === skill.id
+                const missingRequirements = skill.requires.filter(
+                  (requirement) => requirementStates[requirement] === 'unmet',
+                )
                 return (
                   <li className="dsh-ext-row" key={skill.id} data-market-id={skill.id}>
                     <div className="dsh-ext-main">
@@ -744,6 +864,15 @@ function SkillsPanel() {
                         >
                           {installedNow ? sourceBadge(source ?? 'user') : sourceBadge(undefined)}
                         </span>
+                        {missingRequirements.map((requirement) => (
+                          <span
+                            key={requirement}
+                            className="dsh-ext-badge dsh-ext-require"
+                            data-requires={requirement}
+                          >
+                            {requirementBadgeLabel(requirement)}
+                          </span>
+                        ))}
                       </div>
                       {displayBilingual(skill.description) !== '' && (
                         <p className="dsh-ext-desc">{displayBilingual(skill.description)}</p>
@@ -761,14 +890,28 @@ function SkillsPanel() {
                           <span className="dsh-dev-hint">{tr('可在上方卸载', 'Uninstall above')}</span>
                         ) : null
                       ) : (
-                        <button
-                          type="button"
-                          className="dsh-dev-btn"
-                          disabled={busy !== null}
-                          onClick={() => { void installSkill(skill) }}
-                        >
-                          {installLabel(skill.id)}
-                        </button>
+                        <>
+                          {/* 缺能力时先给开启入口，安装按钮禁用：不给一个点下去必然用不了的假入口。 */}
+                          {missingRequirements.map((requirement) => (
+                            <button
+                              key={requirement}
+                              type="button"
+                              className="dsh-dev-btn"
+                              data-require-action={requirement}
+                              onClick={() => { openRequirementSettings(requirement) }}
+                            >
+                              {tr('去开启', 'Enable')}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            className="dsh-dev-btn"
+                            disabled={busy !== null || missingRequirements.length > 0}
+                            onClick={() => { void installSkill(skill) }}
+                          >
+                            {installLabel(skill.id)}
+                          </button>
+                        </>
                       )}
                     </div>
                   </li>
@@ -1092,7 +1235,7 @@ export function ExtensionsSection(_props: PropsRuntime<'settings.section'>) {
 
         {/* 两个面板都保持挂载：切 tab 只隐藏，已加载的列表与搜索词不会丢。 */}
         <div hidden={tab !== 'skills'}>
-          <SkillsPanel />
+          <SkillsPanel active={tab === 'skills'} />
         </div>
         {pluginsMounted && (
           <div hidden={tab !== 'plugins'}>

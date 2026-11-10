@@ -13,10 +13,12 @@ import type {
   InstallResult,
   InstalledSkill,
   LoggerLike,
+  ManifestWarning,
   MarketCategory,
   MarketSkill,
   ParsedManifest,
   RejectedSkill,
+  SkillRequirement,
 } from './types.js'
 
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000
@@ -56,12 +58,15 @@ export interface MarketListResult {
     description: { en: string; zh?: string }
     category: string
     license: string
+    requires: SkillRequirement[]
     installed: boolean
     installedSource?: 'user' | 'bundled'
     removable?: boolean
     updateAvailable: boolean
   }>
   rejected: RejectedSkill[]
+  /** 条目仍可用、但可选字段被降级的原因；与 rejected 分开，避免被误读成不可用。 */
+  warnings: ManifestWarning[]
   /** Present only when the network failed and a previously saved manifest was served. */
   stale?: boolean
   /** Epoch milliseconds of the disk manifest that produced a stale result. */
@@ -482,6 +487,7 @@ export function createService(options: ServiceOptions = {}): SkillMarketService 
       categories: loaded.parsed.manifest.categories,
       skills,
       rejected: loaded.parsed.rejected,
+      warnings: loaded.parsed.warnings,
     }
   }
 
@@ -496,10 +502,15 @@ export function createService(options: ServiceOptions = {}): SkillMarketService 
       logger?.warn?.(`skill market: manifest unavailable for update checks: ${message}`)
     }
     const byId = new Map(manifest?.manifest.skills.map((skill) => [skill.id, skill]) ?? [])
-    return Promise.all(entries.map(async (entry) => ({
-      ...entry,
-      updateAvailable: await computeUpdateAvailable(entry, byId.get(entry.id), logger),
-    })))
+    return Promise.all(entries.map(async (entry) => {
+      const marketSkill = byId.get(entry.id)
+      return {
+        ...entry,
+        // 已安装目录不带依赖声明，必须回到清单按 id 取；清单里没有这个 id 时保持 []。
+        requires: marketSkill?.requires ?? [],
+        updateAvailable: await computeUpdateAvailable(entry, marketSkill, logger),
+      }
+    }))
   }
 
   const install = async (id: string, installOptions: { overwrite?: boolean } = {}): Promise<InstallResult> => {
