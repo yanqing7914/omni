@@ -58,6 +58,12 @@ import { PhoneControlSection } from './dev-section/phone-control.tsx'
  * 只藏入口：PhoneControlSection 与 android_capabilities 解锁的手机工具都不动，改回 false 即恢复。
  */
 export const PHONE_CONTROL_FROZEN = true
+
+/**
+ * 「应用更新」设置分区冻结开关（2026-11-10 用户定）：为 true 时不在设置页注册该分区，
+ * 更新入口改到界面右下角（有新版时才出现）。页面代码与壳侧状态机都保留，改回 false 即恢复。
+ */
+export const APK_UPDATE_SECTION_FROZEN = true
 import { NotifySettingsSection } from './dev-section/notify-settings.tsx'
 import { ApkUpdateSection } from './dev-section/apk-update.tsx'
 import { ExtensionsSection } from './dev-section/extensions.tsx'
@@ -383,12 +389,17 @@ export function apply(ctx: ClientContext): void {
   // 能力，此前唯一入口埋在开发者选项里（对普通用户不可达）——提级为设置页一级分区。
   // order 96：排在通知（97）/ 手机控制（98）/ 开发者选项（99）之前——它是「维护本应用自身」的动作，
   // 与那三项「配置应用行为」的性质不同，放列表更靠上的位置用户才找得到。
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'android-apk-update',
-    order: 96,
-    label: () => tr('应用更新', 'App updates'),
-  }, ApkUpdateSection))
+  //
+  // 已冻结（APK_UPDATE_SECTION_FROZEN，2026-11-10 用户定）：设置里不再出现这一行，改由界面右下角的
+  // 更新入口承担（见 update-entry.ts）。页面代码与壳侧状态机都保留，改回 false 即恢复。
+  if (!APK_UPDATE_SECTION_FROZEN) {
+    ctx.slots.inject('settings.section', () => ctx.slots.register({
+      name: 'settings.section',
+      id: 'android-apk-update',
+      order: 96,
+      label: () => tr('应用更新', 'App updates'),
+    }, ApkUpdateSection))
+  }
 
   // 通知（0.14.1 批 3 / P3-5）：提醒方式与「关掉会怎样」是每个用户都要做的决定，
   // 此前唯一入口埋在开发者选项里（对普通用户不可达）——提级为设置页一级分区。
