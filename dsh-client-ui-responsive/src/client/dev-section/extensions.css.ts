@@ -197,6 +197,12 @@ export const EXTENSIONS_CSS: string = `
   color: var(--dsw-alias-label-secondary);
 }
 
+/* 能力依赖缺失：警示色但仍是徽标外形，和「可更新」的按钮态区分开。 */
+.dsh-ext-require {
+  border-color: var(--dsw-alias-state-warn-primary);
+  color: var(--dsw-alias-state-warn-primary);
+}
+
 /* 「可更新」既是标签也是按钮：沿用徽标外形，但给足可点高度并保留键盘焦点环。 */
 .dsh-ext-update {
   min-height: 24px;

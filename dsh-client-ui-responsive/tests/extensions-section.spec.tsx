@@ -848,6 +848,190 @@ describe('M7-7 文案与样式', () => {
   })
 })
 
+// ── R 能力依赖声明 ─────────────────────────────────────────────────────────
+
+function marketWithRequires(requires?: string[]) {
+  const fixture = marketFixture()
+  return {
+    ...fixture,
+    skills: fixture.skills.map((skill, index) => (
+      index === 0 && requires !== undefined ? { ...skill, requires } : skill
+    )),
+  }
+}
+
+function requiredBadge(el: HTMLElement, id: string, requirement = 'a11y'): HTMLElement | null {
+  return row(el, id).querySelector<HTMLElement>(`[data-requires="${requirement}"]`)
+}
+
+function a11yBridge(enabled: boolean, extra: Record<string, unknown> = {}) {
+  const openA11ySettings = vi.fn()
+  vi.stubGlobal('androidBridge', {
+    a11yStatus: () => JSON.stringify({ enabled }),
+    openA11ySettings,
+    ...extra,
+  })
+  return openA11ySettings
+}
+
+describe('R3 依赖不满足', () => {
+  it('requires a11y 且 enabled:false → 徽标、安装禁用、去开启调用 openA11ySettings', async () => {
+    const openA11ySettings = a11yBridge(false)
+    const fetchSpy = makeFetch({
+      '/api/skillmarket/installed': () => ({ body: [] }),
+      '/api/skillmarket/list': () => ({ body: marketWithRequires(['a11y']) }),
+    })
+    vi.stubGlobal('fetch', fetchSpy.impl)
+    const el = await render()
+
+    const target = row(el, 'docx')
+    expect(requiredBadge(el, 'docx')).not.toBeNull()
+    expect(target.textContent).toContain('需要开启无障碍')
+    expect(buttonByText(target, '安装').disabled).toBe(true)
+
+    await act(async () => { buttonByText(target, '去开启').click() })
+    expect(openA11ySettings).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('R4 重新判定', () => {
+  it('开启后切 tab 再回来 → 徽标消失、安装可点', async () => {
+    let enabled = false
+    a11yBridge(false)
+    // 用可变实现替换，模拟用户从系统设置页开启后回到应用。
+    ;(window.androidBridge as { a11yStatus: () => string }).a11yStatus = () => JSON.stringify({ enabled })
+
+    const fetchSpy = makeFetch({
+      '/api/skillmarket/installed': () => ({ body: [] }),
+      '/api/skillmarket/list': () => ({ body: marketWithRequires(['a11y']) }),
+      '/api/dshmarketplace/search*': () => ({ body: { total: 0, count: 0, results: [] } }),
+    })
+    vi.stubGlobal('fetch', fetchSpy.impl)
+    const el = await render()
+    expect(requiredBadge(el, 'docx')).not.toBeNull()
+
+    await act(async () => { buttonByText(row(el, 'docx'), '去开启').click() })
+    enabled = true
+
+    await openPlugins(el)
+    await act(async () => { tabButton(el, 'skills').click() })
+    await settle(4)
+
+    expect(requiredBadge(el, 'docx')).toBeNull()
+    expect(buttonByText(row(el, 'docx'), '安装').disabled).toBe(false)
+  })
+})
+
+describe('R5 无依赖不新增节点', () => {
+  it('requires:[] 或缺省 → 不出现徽标/开启按钮', async () => {
+    for (const extra of [{ requires: [] }, {}]) {
+      const fixture = marketWithRequires()
+      const withField = {
+        ...fixture,
+        skills: fixture.skills.map((skill, index) => (index === 0 ? { ...skill, ...extra } : skill)),
+      }
+      const fetchSpy = makeFetch({
+        '/api/skillmarket/installed': () => ({ body: [] }),
+        '/api/skillmarket/list': () => ({ body: withField }),
+      })
+      vi.stubGlobal('fetch', fetchSpy.impl)
+      const el = await render()
+
+      expect(el.querySelector('[data-requires]')).toBeNull()
+      expect(el.querySelector('[data-require-action]')).toBeNull()
+      expect(el.textContent).not.toContain('需要开启')
+      expect(buttonByText(row(el, 'docx'), '安装').disabled).toBe(false)
+
+      await unmountCurrent()
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    }
+  })
+})
+
+describe('R6 桥缺席', () => {
+  it('没有 androidBridge 或状态读不到 → 不显示徽标、安装可点', async () => {
+    const bridges: Array<Record<string, unknown> | undefined> = [
+      undefined,
+      { a11yStatus: () => 'not-json' },
+    ]
+    for (const bridge of bridges) {
+      if (bridge !== undefined) vi.stubGlobal('androidBridge', bridge)
+      const fetchSpy = makeFetch({
+        '/api/skillmarket/installed': () => ({ body: [] }),
+        '/api/skillmarket/list': () => ({ body: marketWithRequires(['a11y']) }),
+      })
+      vi.stubGlobal('fetch', fetchSpy.impl)
+      const el = await render()
+
+      expect(requiredBadge(el, 'docx')).toBeNull()
+      expect(el.textContent).not.toContain('需要开启无障碍')
+      expect(buttonByText(row(el, 'docx'), '安装').disabled).toBe(false)
+
+      await unmountCurrent()
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    }
+  })
+})
+
+describe('R7 已安装但依赖不满足', () => {
+  it('已安装行显示徽标，且不额外给「去开启」，原有卸载入口保留', async () => {
+    a11yBridge(false)
+    const fetchSpy = makeFetch({
+      '/api/skillmarket/installed': () => ({
+        body: [{
+          id: 'docx',
+          name: 'docx',
+          description: '创建与编辑 Word 文档',
+          source: 'user',
+          path: '/skills/docx',
+          removable: true,
+          requires: ['a11y'],
+        }],
+      }),
+      '/api/skillmarket/list': () => ({ body: emptyMarket() }),
+    })
+    vi.stubGlobal('fetch', fetchSpy.impl)
+    const el = await render()
+
+    const installedRow = row(el, 'docx')
+    expect(installedRow.textContent).toContain('需要开启无障碍')
+    expect(installedRow.querySelector('[data-require-action]')).toBeNull()
+    expect(buttonByText(installedRow, '卸载')).not.toBeNull()
+  })
+})
+
+describe('R8 文案与样式', () => {
+  it('新增文案全部经 tr() 双语；新增样式只用 --dsw-* 变量', async () => {
+    const source = readFileSync('src/client/dev-section/extensions.tsx', 'utf8')
+    expect(source).toContain("tr('需要开启无障碍', 'Needs accessibility')")
+    expect(source).toContain("tr('需要开启 Shizuku', 'Needs Shizuku')")
+    expect(source).toContain("tr('去开启', 'Enable')")
+
+    const css = readFileSync('src/client/dev-section/extensions.css.ts', 'utf8')
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
+    expect(css).not.toMatch(/rgba?\(/)
+    expect(css).toContain('.dsh-ext-require')
+    expect(css).toContain('var(--dsw-alias-state-warn-primary)')
+
+    // 英文环境同一批文案切到英文。
+    await unmountCurrent()
+    document.documentElement.lang = 'en'
+    a11yBridge(false)
+    const fetchSpy = makeFetch({
+      '/api/skillmarket/installed': () => ({ body: [] }),
+      '/api/skillmarket/list': () => ({ body: marketWithRequires(['a11y']) }),
+    })
+    vi.stubGlobal('fetch', fetchSpy.impl)
+    const el = await render()
+
+    expect(requiredBadge(el, 'docx')!.textContent).toBe('Needs accessibility')
+    expect(buttonByText(row(el, 'docx'), 'Enable')).not.toBeNull()
+    expect(buttonByText(row(el, 'docx'), 'Install').disabled).toBe(true)
+  })
+})
+
 // ── E9 颜色与双语 ──────────────────────────────────────────────────────────
 
 describe('E9 颜色与双语', () => {

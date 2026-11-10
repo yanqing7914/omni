@@ -54,6 +54,8 @@ async function discoverRoot(root: string, source: 'user' | 'bundled'): Promise<I
         source,
         path: join(root, entry.name),
         removable: source === 'user',
+        // 目录本身不知道能力依赖；服务层会按 id 从市场清单补上。
+        requires: [],
         // The service fills this in after comparing against the market manifest.
         updateAvailable: false,
       })
@@ -73,6 +75,8 @@ async function discoverRoot(root: string, source: 'user' | 'bundled'): Promise<I
       source,
       path,
       removable: source === 'user',
+      // 目录本身不知道能力依赖；服务层会按 id 从市场清单补上。
+      requires: [],
       // The service fills this in after comparing against the market manifest.
       updateAvailable: false,
     })

@@ -1,15 +1,20 @@
 import { SkillMarketError } from './errors.js'
 import { assertSafeRelativePath, assertSafeSourcePath, KEBAB_ID } from './paths.js'
+import { SKILL_REQUIREMENTS } from './types.js'
 import type {
   Bilingual,
+  ManifestWarning,
   MarketCategory,
   MarketManifest,
   MarketSkill,
   ParsedManifest,
   RejectedSkill,
   SkillFile,
+  SkillRequirement,
   SkillSource,
 } from './types.js'
+
+const KNOWN_REQUIREMENTS = new Set<string>(SKILL_REQUIREMENTS)
 
 const REPO_PART = /^[A-Za-z0-9_.-]+$/
 const SHA256 = /^[a-f0-9]{64}$/
@@ -59,6 +64,39 @@ function readSource(value: unknown, reasons: string[]): SkillSource | null {
   }
   if (reasons.length > 0) return null
   return { owner, repo, ref, path }
+}
+
+/**
+ * Read the optional `requires` declaration.
+ *
+ * 解析策略是「降级不拒绝」：缺省为空；不是数组或含未知值时只丢弃非法项并记一条 warning。
+ * 这些字段面向未来扩展，一条坏声明不该让整个技能从市场消失——那会把「能力没声明全」
+ * 变成「技能装不了」这种更大的故障。
+ */
+function readRequires(
+  value: unknown,
+  id: string,
+  warnings: ManifestWarning[],
+): SkillRequirement[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    warnings.push({ id, reasons: ['requires must be an array'] })
+    return []
+  }
+  const requires: SkillRequirement[] = []
+  const unknown: string[] = []
+  for (const item of value) {
+    if (typeof item !== 'string' || !KNOWN_REQUIREMENTS.has(item)) {
+      const rendered = typeof item === 'string' ? `"${item}"` : String(item)
+      if (!unknown.includes(rendered)) unknown.push(rendered)
+      continue
+    }
+    if (!requires.includes(item as SkillRequirement)) requires.push(item as SkillRequirement)
+  }
+  if (unknown.length > 0) {
+    warnings.push({ id, reasons: [`requires contains an unknown capability: ${unknown.join(', ')}`] })
+  }
+  return requires
 }
 
 function readFiles(value: unknown, reasons: string[]): SkillFile[] | null {
@@ -126,6 +164,7 @@ export function parseManifest(value: unknown): ParsedManifest {
 
   const skills: MarketSkill[] = []
   const rejected: RejectedSkill[] = []
+  const warnings: ManifestWarning[] = []
   const acceptedIds = new Set<string>()
 
   for (const raw of value.skills) {
@@ -157,6 +196,8 @@ export function parseManifest(value: unknown): ParsedManifest {
       rejected.push({ id, reasons: [...new Set(reasons)] })
       continue
     }
+    // 只给「条目本身可用」的技能记降级原因；被拒绝的条目已有 rejected 原因，不重复告警。
+    const requires = readRequires(raw.requires, id, warnings)
     acceptedIds.add(id)
     skills.push({
       id,
@@ -165,6 +206,7 @@ export function parseManifest(value: unknown): ParsedManifest {
       description: description as Bilingual,
       category,
       license,
+      requires,
       source: source as SkillSource,
       files: files as SkillFile[],
     })
@@ -175,7 +217,7 @@ export function parseManifest(value: unknown): ParsedManifest {
     categories: categories.sort((a, b) => a.id.localeCompare(b.id)),
     skills: skills.sort((a, b) => a.id.localeCompare(b.id)),
   }
-  return { manifest, rejected }
+  return { manifest, rejected, warnings }
 }
 
 /** Validate the pieces of a source reference that end up in a download path. */

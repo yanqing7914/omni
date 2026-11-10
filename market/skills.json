@@ -573,6 +573,9 @@
       },
       "category": "shopping",
       "license": "MIT",
+      "requires": [
+        "a11y"
+      ],
       "source": {
         "owner": "yanqing7914",
         "repo": "omni",
