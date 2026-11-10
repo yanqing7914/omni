@@ -60,6 +60,8 @@ import { PhoneControlSection } from './dev-section/phone-control.tsx'
 export const PHONE_CONTROL_FROZEN = true
 import { NotifySettingsSection } from './dev-section/notify-settings.tsx'
 import { ApkUpdateSection } from './dev-section/apk-update.tsx'
+import { ExtensionsSection } from './dev-section/extensions.tsx'
+import { EXTENSIONS_CSS } from './dev-section/extensions.css.ts'
 import { DEV_SECTION_CSS } from './dev-section/dev-section.css.ts'
 import { MARKETPLACE_CSS } from './marketplace/marketplace.css.ts'
 import { registerMarketplaceAction } from './marketplace/marketplace-entry.tsx'
@@ -366,6 +368,16 @@ export function apply(ctx: ClientContext): void {
     // 开发者选项子区（2026-08-23）：ADB 授权面板等安卓调试设施挂进此槽——不开独立导航行。
     children: { 'settings.dev.item': { kind: 'list', scope: 'root' } },
   }, DevSection))
+
+  // 扩展（技能 + 插件）：市场服务端已就绪，此前设置页没有页面侧入口。
+  // order 95 排在应用更新（96）之前：它是「给引擎加能力」的日常入口，比维护应用自身更常打开。
+  ctx.effect(() => injectStyle('extensions', EXTENSIONS_CSS), 'ui-responsive: extensions styles')
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'android-extensions',
+    order: 95,
+    label: () => tr('扩展', 'Extensions'),
+  }, ExtensionsSection))
 
   // 应用更新（用户拍板「更新块继续放设置页、从开发者选项提出来」）：应用怎么更新是每个用户都要用到的
   // 能力，此前唯一入口埋在开发者选项里（对普通用户不可达）——提级为设置页一级分区。
