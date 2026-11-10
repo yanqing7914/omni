@@ -332,12 +332,25 @@ class RuntimeExtractProgressTest {
   }
 
   @Test
-  fun `A4 渲染层的百分比与剩余时间文本只来自模型`() {
+  fun `A4 渲染层的进度行只来自模型且全页只有这一行`() {
     val r = codeOnly(source("GuidePageRenderer.kt"))
-    assertTrue(r.contains("progressPercent.text = view.percentLabel"))
-    assertTrue(r.contains("progressEta.text = view.etaLabel"))
-    assertEquals("progressPercent 只有一处写入", 1, Regex("""progressPercent\.text\s*=""").findAll(r).count())
-    assertEquals("progressEta 只有一处写入", 1, Regex("""progressEta\.text\s*=""").findAll(r).count())
+    assertTrue(
+      "确定态必须用模型给出的两段拼成唯一一行",
+      r.contains("progressText.text = formatProgressLine(view)"),
+    )
+    assertEquals(
+      "进度行的拼法只允许这一处调用（多一处就会出现第二种口径）",
+      1,
+      Regex("""formatProgressLine\(""").findAll(r).count(),
+    )
+    val determinate = r.substringAfter("private fun renderDeterminate(")
+      .substringBefore("private fun localizedStagePhrase(")
+    assertEquals(
+      "确定态里进度文本只写一次",
+      1,
+      Regex("""progressText\.text\s*=""").findAll(determinate).count(),
+    )
+    assertFalse("旧的三节点（百分比 / 剩余时间各一枚）不得回来", r.contains("progressPercent") || r.contains("progressEta"))
     assertFalse("渲染层不得自己拼百分号", r.contains("+ \"%\""))
   }
 
@@ -376,7 +389,7 @@ class RuntimeExtractProgressTest {
   fun `A6 进度区新增视图的颜色全部来自 R color ds token`() {
     val chrome = codeOnly(source("GuideChrome.kt"))
     val start = chrome.indexOf("val progressBar = ProgressBar(")
-    val end = chrome.indexOf("card.addView(progressEta)")
+    val end = chrome.indexOf("card.addView(progressText)")
     assertTrue("找不到进度区", start in 0 until end)
     val block = chrome.substring(start, end)
     val colorCalls = Regex("""color\(([^)]*)\)""").findAll(block).map { it.groupValues[1].trim() }.toList()

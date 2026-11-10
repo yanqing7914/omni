@@ -15,6 +15,19 @@ import java.io.File
 
 internal enum class GuidePhase { Idle, Starting, Extracting, Updating, Recovering, Undoing, Error, Closed, Info }
 
+/**
+ * 进行中的相位是否允许展示诊断区（日志摘要 / 分享诊断包）。
+ *
+ * 解压与启动时屏幕上只该有「正在发生什么」：engine.log 尾部与「分享诊断包」是排障入口，
+ * 在顺利进行的首启里纯属噪声（用户截图里的两处都源自这里）。失败相位（Error/Closed）与
+ * 空闲/信息相位照旧可用——功能 D 的场景（引擎已起、boot-fail.log 有证据）不在进行中相位。
+ */
+internal fun diagnosticsAllowedForPhase(phase: GuidePhase): Boolean = when (phase) {
+  GuidePhase.Starting, GuidePhase.Extracting, GuidePhase.Updating,
+  GuidePhase.Recovering, GuidePhase.Undoing -> false
+  GuidePhase.Idle, GuidePhase.Info, GuidePhase.Error, GuidePhase.Closed -> true
+}
+
 /** Stable user copy comes only from a structured failure code, never raw paths or exception text. */
 internal fun startupFailureHintResource(code: String?): Int = when (code) {
   EngineManager.REFUSAL_PORT_FOREIGN -> R.string.ds_start_port_foreign
@@ -237,11 +250,9 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
 
   lateinit var chrome: GuideChrome
   private lateinit var engineStatus: TextView
-  /** 引擎启动流写入解压进度（EngineStartFlow）。 */
+  /** 引擎启动流写入解压进度（EngineStartFlow）；全页唯一的一行进度文本。 */
   lateinit var progressText: TextView
   private lateinit var progressBar: ProgressBar
-  private lateinit var progressPercent: TextView
-  private lateinit var progressEta: TextView
   private lateinit var crashBanner: TextView
   private lateinit var logSummary: TextView
   /** 测试界面三段式结构块：入场 stagger 动画按块依次淡入。 */
@@ -404,8 +415,6 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
     engineStatus = chrome.engineStatus
     progressText = chrome.progressText
     progressBar = chrome.progressBar
-    progressPercent = chrome.progressPercent
-    progressEta = chrome.progressEta
     crashBanner = chrome.crashBanner
     logSummary = chrome.logSummary
     brandBlock = chrome.brandBlock
@@ -487,6 +496,8 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
       // 其余（Idle / Info）＝尚未启动或中性事实陈述，主按钮是「启动引擎」
       else -> activity.getString(R.string.ds_start_engine)
     }
+    // 进行中（locked）＝次级收紧档；空闲/失败＝强调色实心满宽。见 applyGuidePrimaryStyle 的说明。
+    applyGuidePrimaryStyle(activity, chrome.primaryButton, locked)
     // The assistant row appears with a failure phase and stays available even when the durable
     // repair gate is set; its absence was what forced users to open the assistant to retry.
     (chrome.repairButton.parent as? View)?.visibility =
@@ -494,18 +505,17 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
 
     val showProgress = busy
     progressBar.visibility = if (showProgress) View.VISIBLE else View.GONE
-    // 0.14.2 P2：进度条**恒为不确定态**。旧实现会在流程给出「同口径的 done/total」时切确定档，
-    // 但那个 total 是编造常数（见上方 P2 说明），于是进度条宣称的比例也是编造的。
-    // 现在只保留循环动画：它如实表达「还在动」，不表达「动了多少百分比」。
-    // 默认不确定态；只有解压相位里、拿到 xz index 真实总量后，showExtractProgress 才切确定态。
-    // 解压期间流程每报一个阶段都会重设一次 Extracting，那时已切出的确定态保持不动（否则进度条来回闪）。
+    // 0.14.2 P2：进度条**恒为不确定态**；只有解压相位里、拿到 xz index 真实总量后，
+    // showExtractProgress 才切确定态。解压期间流程每报一个阶段都会重设一次 Extracting，
+    // 那时已切出的确定态保持不动（否则进度条来回闪）。
     if (phase != GuidePhase.Extracting || !progressDeterminateShown) {
       progressBar.isIndeterminate = true
       progressDeterminateShown = false
-      progressPercent.visibility = View.GONE
-      progressEta.visibility = View.GONE
     }
+    // 非解压相位不显示这一行；解压期间由阶段句或「百分比 · 剩余时间」占据同一行。
     if (phase != GuidePhase.Extracting) progressText.visibility = View.GONE
+    // 从故障页重新进入解压/启动时，上一轮留下的日志摘要必须立刻收掉，不能等下一次 showGuide。
+    if (!diagnosticsAllowedForPhase(phase)) chrome.logSection.visibility = View.GONE
 
     val dotColor = when (phase) {
       GuidePhase.Error, GuidePhase.Closed -> activity.getColor(R.color.ds_danger)
@@ -735,14 +745,11 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
     if (!progressDeterminateShown) {
       progressDeterminateShown = true
       progressBar.isIndeterminate = false
-      if (progressText.text.isNullOrBlank()) progressText.text = localizedStagePhrase(RUNTIME_STAGE_PHRASES[0])
     }
     progressText.visibility = View.VISIBLE
+    // 全页唯一的进度文本行：「42% · 预计还需 3 分钟」；估算缺席时只有「42%」。
+    progressText.text = formatProgressLine(view)
     progressBar.setProgress(pct, DsUi.animationsEnabled(activity))
-    progressPercent.text = view.percentLabel
-    progressPercent.visibility = View.VISIBLE
-    progressEta.text = view.etaLabel
-    progressEta.visibility = if (view.etaLabel.isNullOrEmpty()) View.GONE else View.VISIBLE
   }
 
   /** Stage phrases stay a single list for the rotation test; the copy is translated here. */
@@ -886,18 +893,17 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
       if (action == StorageChipAction.NONE) null
       else { _ -> runStorageChipAction(action) },
     )
-    // 功能 B（0.14.6）B1/B3：分享入口的可见性判据。
-    //
-    // 为什么**不是**「有 Error 相位才有」：功能 D 的现场（引擎起来了、otel 条目没激活）根本不
-    // 会进 Error 相位，而它的 engine.log 正是最需要分享的那一份；反过来，日志缺失的失败
-    // （engine.log absent）恰恰最需要诊断包。故判据取「任一类可诊断证据成立」：
+    // 判据取「任一类可诊断证据成立」且**不在进行中相位**：解压/启动时这两个入口属于噪声。
     //   boot-fail.log 非空 / boot-diag.log 非空 / 当前相位为 Error 或 Closed。
     // 常态（Idle/Info/Starting 且无失败记录）不显示——不在正常启动页上多摆一个入口。
-    chrome.shareLog.visibility = if (LogShare.shouldOffer(activity.filesDir, phaseIsFailed())) {
-      View.VISIBLE
-    } else {
-      View.GONE
-    }
+    chrome.shareLog.visibility =
+      if (diagnosticsAllowedForPhase(lastGuidePhase) &&
+        LogShare.shouldOffer(activity.filesDir, phaseIsFailed())
+      ) {
+        View.VISIBLE
+      } else {
+        View.GONE
+      }
   }
 
   /** 当前相位是否属于「已出事」（分享入口的证据之一）。 */
@@ -1223,7 +1229,8 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
       crashBanner.visibility = View.GONE
     }
     val tail = tailEngineLog(8)
-    if (tail.isNotEmpty()) {
+    // 日志摘要只在「确有失败/空闲排障场景」出现：进行中的解压/启动相位把它藏掉。
+    if (tail.isNotEmpty() && diagnosticsAllowedForPhase(lastGuidePhase)) {
       logSummary.text = tail
       chrome.logSection.visibility = View.VISIBLE
     } else {

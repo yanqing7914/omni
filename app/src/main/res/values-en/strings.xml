@@ -50,7 +50,7 @@
   <string name="ds_storage_detail_copied">Failure details copied; paste them into your report</string>
   <string name="ds_storage_no_detail">No failure details to copy yet</string>
   <string name="ds_storage_probing">Checking storage…</string>
-  <string name="ds_brand_explain">Local AI tasks you can watch and control</string>
+  <string name="ds_brand_explain">Local AI tasks, actions visible</string>
   <string name="ds_recovering">Recovering automatically</string>
   <string name="ds_copy_log_empty">No log to copy yet (the engine has not written engine.log)</string>
   <string name="ds_log_copied">Log copied</string>
