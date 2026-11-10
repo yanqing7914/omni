@@ -88,6 +88,11 @@ UI   dsh-client-ui-responsive · dev-section/extensions.tsx
   `a11yStatus()` 的 `enabled`、Shizuku 读 `shizukuStatus()` 的 `granted`，只有明确 `true`
   才算满足；桥缺席（桌面宿主）或字段读不到按满足处理（不误伤），但不会显示「已满足」标记。
   明确为 `false` 时在安装前给出警示徽标并禁用安装，同时提供「去开启」入口。
-- **付款类动作的硬拦截**：淘宝技能目前把「下单/付款前必须问用户」写在说明里，属于提示层约束。
-  要变成代码级约束，需要在设备层对结算页特征做拦截。
+- **付款类动作的硬拦截**：已做（无障碍通道）。`DeviceControlService` 在 click / longClick
+  真正执行前调用 `PaymentGuard`（纯函数、JVM 单测）：只在淘宝 / 天猫包内生效，命中
+  「提交订单 / 结算 / 付款 / 支付 / 退款 / 退货 / 确认收货 / 删除订单 / 修改收货地址」
+  等标签即拒绝；nx/ny 坐标点按先按坐标命中节点再判，避免「换坐标绕过」。被拒时只返回
+  `payment-blocked` 与「请用户本人操作」的引导，**不提供模型可用的放行开关**。
+  边界：纯 Shizuku 的 `input tap`、`ACTION_VIEW` 深链拿不到控件文本，不在覆盖内；
+  非购物应用不拦。
 - **已装技能的版本说明**：目前只有 `updateAvailable` 布尔，没有版本号与变更说明。

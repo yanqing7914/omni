@@ -1134,6 +1134,69 @@ class DeviceControlService : AccessibilityService() {
     return best
   }
 
+  /**
+   * 付款类动作的设备层硬拦截（2026-11-10）。
+   *
+   * 判据在 [PaymentGuard]（纯函数、JVM 可测）；这里只负责从**真正会被点的那个节点**上取标签：
+   * 目标自身 + 最多 3 层近祖宗的 text/description。取近祖宗的用途是「图文按钮」——图标本身
+   * 没有文字，但外层可点容器写着「立即付款」。
+   */
+  private fun paymentLabels(node: AccessibilityNodeInfo): List<String> {
+    val labels = ArrayList<String>(4)
+    var current: AccessibilityNodeInfo? = node
+    var hops = 0
+    while (current != null && hops <= 3) {
+      current.text?.toString()?.let { if (it.isNotBlank()) labels.add(it) }
+      current.contentDescription?.toString()?.let { if (it.isNotBlank()) labels.add(it) }
+      current = current.parent
+      hops++
+    }
+    return labels
+  }
+
+  /** 命中返回可直接作为 `__error` 的失败体；未命中返回 null（放行）。 */
+  private fun paymentBlock(node: AccessibilityNodeInfo): JSONObject? {
+    // 少数节点的 packageName 为空（合成节点/覆盖层），退回当前活动窗口的包名再判一次。
+    val pkg = node.packageName?.toString()?.takeIf { it.isNotEmpty() }
+      ?: rootFor(activeDisplayId)?.packageName?.toString()
+    val keyword = PaymentGuard.blockedKeyword(pkg, paymentLabels(node)) ?: return null
+    return error(
+      UiText.t(
+        this,
+        "payment-blocked：已拦截对「$keyword」的点击。提交订单、付款、退款、确认收货这类动作必须由用户本人在手机上完成；"
+          + "请停在当前页面，把要点哪个按钮告诉用户，不要用坐标或其它通道重试。",
+        "payment-blocked: blocked a tap on \"$keyword\". Submitting orders, paying, refunds, and confirming receipt "
+          + "must be done by the user on the phone; stop on this screen and tell the user which button to press — "
+          + "do not retry with coordinates or another channel.",
+      ),
+    )
+  }
+
+  /** 坐标点按的命中检测：取包含该点的最深可见节点，再套同一条判据。 */
+  private fun paymentBlockAt(x: Float, y: Float): JSONObject? {
+    val root = rootFor(activeDisplayId) ?: return null
+    // 先看前台包名再建命中点：非购物应用的点按不必为一次全树遍历付账。
+    if (!PaymentGuard.isCommercePackage(root.packageName?.toString())) return null
+    val node = nodeAtPoint(root, x, y) ?: return null
+    return paymentBlock(node)
+  }
+
+  private fun nodeAtPoint(root: AccessibilityNodeInfo?, x: Float, y: Float): AccessibilityNodeInfo? {
+    if (root == null) return null
+    var best: AccessibilityNodeInfo? = null
+    val point = Rect(x.toInt(), y.toInt(), x.toInt() + 1, y.toInt() + 1)
+    fun visit(node: AccessibilityNodeInfo?, depth: Int) {
+      if (node == null || depth > MAX_DEPTH) return
+      val bounds = Rect()
+      node.getBoundsInScreen(bounds)
+      if (!Rect.intersects(bounds, point)) return
+      if (node.isVisibleToUser) best = node
+      for (index in 0 until node.childCount) visit(node.getChild(index), depth + 1)
+    }
+    visit(root, 0)
+    return best
+  }
+
   private fun handleClick(args: JSONObject): JSONObject {
     requireFresh(args)?.let { return it }
     when (val target = resolveTarget(args)) {
@@ -1146,6 +1209,8 @@ class DeviceControlService : AccessibilityService() {
           node = node.parent ?: break
           hops++
         }
+        // 判据放在「最终会执行动作的节点」上：祖先回退之后、真正 performAction 之前。
+        paymentBlock(node)?.let { return it }
         if (node.isClickable) {
           val ok = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
           if (ok) {
@@ -1167,6 +1232,8 @@ class DeviceControlService : AccessibilityService() {
       val basis = coordBasis()
       val x = (args.optDouble("nx") * basis.width).toFloat()
       val y = (args.optDouble("ny") * basis.height).toFloat()
+      // 坐标点按同样要拦：否则「按 ref 点会被告知别碰付款」就是一句空话，改传 nx/ny 即可绕过。
+      paymentBlockAt(x, y)?.let { return withBasis(it, basis) }
       return withBasis(tapAt(x, y, "gesture-norm"), basis)
     }
     return error("需要 row（行句柄）或 nx/ny")
@@ -1209,6 +1276,8 @@ class DeviceControlService : AccessibilityService() {
           node = node.parent ?: break
           hops++
         }
+        // 长按也会弹出「删除订单」这类菜单，与点击共用同一条判据。
+        paymentBlock(node)?.let { return it }
         if (node.isLongClickable) {
           val ok = node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
           if (ok) {
@@ -1229,6 +1298,7 @@ class DeviceControlService : AccessibilityService() {
       val basis = coordBasis()
       val x = (args.optDouble("nx") * basis.width).toFloat()
       val y = (args.optDouble("ny") * basis.height).toFloat()
+      paymentBlockAt(x, y)?.let { return withBasis(it, basis) }
       return withBasis(pressAt(x, y, durationMs, "gesture-norm-longclick"), basis)
     }
     return error("需要 row（行句柄）或 nx/ny")

@@ -1655,7 +1655,9 @@ properties: {
       '语义点击/长按：按 android_ui_dump 清单的引用点按控件。引用格式 id:n3 / text:精确文本 / desc:… / rid:…；裸数字按 id。' +
       '无控件树时用 nx/ny（0-1，相对物理屏；由截图像素换算 nx=x/截宽、ny=y/截高，工具层负责映射）。' +
       '虚拟屏坐标用 x/y 绝对像素 + screenId。目标不可点自动回退最近可点祖先；不在最近 dump 中返回引导。' +
-      'longClick:true = 长按。需 danger-full-access；每次调用审计。',
+      'longClick:true = 长按。需 danger-full-access；每次调用审计。' +
+      '淘宝/天猫内的提交订单、结算、付款、退款、确认收货、删除订单等按钮由设备层硬拦截（payment-blocked），' +
+      '被拒时不要换坐标重试，把页面停在当前一步并让用户本人操作。',
     parameters: {
       ref: { type: 'string', description: '控件引用（id:n3 或 text:精确文本 等；与 nx/ny 二选一）' },
       nx: { type: 'number', description: '归一化 X（0-1，相对物理屏宽；= 截图内像素 x ÷ 截图宽）——无 ref 时使用' },
