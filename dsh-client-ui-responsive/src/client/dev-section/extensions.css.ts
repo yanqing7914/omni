@@ -56,6 +56,29 @@ export const EXTENSIONS_CSS: string = `
   padding-top: 4px;
 }
 
+/* 屏幕范围提示：与市场清单解耦的兜底入口，警示色但保持块级阅读宽度。 */
+.dsh-ext-scope-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-state-warn-primary);
+  border-radius: var(--dsw-radius-md);
+}
+
+.dsh-ext-scope-notice p {
+  flex: 1 1 220px;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.dsh-ext-scope-notice .dsh-dev-btn {
+  min-height: 40px;
+}
+
 .dsh-ext-search-wrap {
   display: block;
 }
