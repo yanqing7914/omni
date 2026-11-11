@@ -1078,6 +1078,30 @@ describe('R12 范围读不到', () => {
   })
 })
 
+// ── R13 屏幕范围兜底（与市场清单解耦） ─────────────────────────────────────
+
+describe('R13 屏幕范围兜底提示', () => {
+  it('清单里没有 requires 也给出允许入口；点击后提示消失', async () => {
+    const bridge = scopeBridge('virtual-only')
+    vi.stubGlobal('fetch', makeFetch({
+      '/api/skillmarket/installed': () => ({ body: [] }),
+      // 故意用不带 requires 的旧清单：徽标不会出现，兜底提示仍须在场。
+      '/api/skillmarket/list': () => ({ body: marketFixture() }),
+    }).impl)
+    const el = await render()
+
+    const banner = el.querySelector<HTMLElement>('[data-scope="virtual-only"]')
+    expect(banner).not.toBeNull()
+    expect(banner!.textContent).toContain('当前只允许操作虚拟屏')
+    expect(el.querySelector('[data-requires]')).toBeNull()
+
+    await act(async () => { buttonByText(banner!, '允许真实屏幕').click() })
+    expect(bridge.setScreenScope).toHaveBeenCalledWith('all')
+    await settle(2)
+    expect(el.querySelector('[data-scope="virtual-only"]')).toBeNull()
+  })
+})
+
 describe('R8 文案与样式', () => {
   it('新增文案全部经 tr() 双语；新增样式只用 --dsw-* 变量', async () => {
     const source = readFileSync('src/client/dev-section/extensions.tsx', 'utf8')

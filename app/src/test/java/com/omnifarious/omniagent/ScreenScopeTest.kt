@@ -19,6 +19,16 @@ class ScreenScopeTest {
     assertEquals(ScreenScope.VIRTUAL_ONLY, ScreenScope.fromWire(""))
   }
 
+  /** 2026-11-11：从未设置过 = ALL（真实屏是设备控制的主场景）；有值但损坏才 fail-closed。 */
+  @Test
+  fun neverConfiguredDefaultsToAllButCorruptDataStillFailsClosed() {
+    assertEquals(ScreenScope.ALL, ScreenScope.fromStored(null))
+    assertEquals(ScreenScope.ALL, ScreenScope.fromStored("all"))
+    assertEquals(ScreenScope.VIRTUAL_ONLY, ScreenScope.fromStored("virtual-only"))
+    assertEquals(ScreenScope.VIRTUAL_ONLY, ScreenScope.fromStored("all-screens"))
+    assertEquals(ScreenScope.VIRTUAL_ONLY, ScreenScope.fromStored(""))
+  }
+
   @Test
   fun scopeAllowsOnlyItsDeclaredStableTargets() {
     assertEquals(true, ScreenScope.VIRTUAL_ONLY.allows(ScreenTargets.VIRTUAL))

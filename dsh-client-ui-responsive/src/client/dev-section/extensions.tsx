@@ -708,6 +708,30 @@ function SkillsPanel({ active }: { active: boolean }) {
 
   return (
     <div className="dsh-ext-panel" data-panel="skills">
+      {/* 与市场清单解耦：即使清单拉不到/是旧的，只要本机范围是 virtual-only 也给出放行入口。
+          直接读桥，不依赖任何行上的 requires——这正是「已装技能在旧清单下没有徽标」的兜底。 */}
+      {requirementStates['real-screen'] === 'unmet' && (
+        <div className="dsh-ext-scope-notice" role="status" data-scope="virtual-only">
+          <p>
+            {tr(
+              '当前只允许操作虚拟屏。淘宝这类装在真实屏幕上的应用暂时用不了；允许真实屏幕访问后即可恢复。',
+              'Only virtual screens are allowed right now. Apps on the real screen, such as Taobao, cannot be operated until real-screen access is allowed.',
+            )}
+          </p>
+          <button
+            type="button"
+            className="dsh-dev-btn"
+            data-scope-action="allow-real"
+            onClick={() => {
+              openRequirementSettings('real-screen')
+              refreshRequirements()
+            }}
+          >
+            {requirementActionLabel('real-screen')}
+          </button>
+        </div>
+      )}
+
       <label className="dsh-ext-search-wrap">
         <span className="dsh-ext-visually-hidden">{tr('搜索技能', 'Search skills')}</span>
         <input

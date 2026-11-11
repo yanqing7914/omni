@@ -1012,7 +1012,7 @@
     "P02 -> ADBKeyboard 输入法 | 广播点名组件 `-n …/.AdbKeyboardReceiver` 并带 nonce auth；壳侧按 `getSentFromUid()`（root/adb shell）或 nonce 校验，结果码写回广播（1 已提交/2 未就绪/3 被拒/4 请求不合法/5 无连接），引擎据结果码判真实落地",
     "P02 -> vdisplay 工具面 | 失败文案把模型引到 android_vdisplay_input 与 android_vdisplay_status 承接坐标与状态",
     "P02 -> 审计面 | priv.audit 写 files/audit/audit.ndjson，与 bridge 和壳侧 ControlAudit 同路径同格式",
-    "P02 -> 屏幕范围偏好 | guard 每次调用现读用户范围，默认 virtual-only，越界即结构化拒绝并给引导",
+    "P02 -> 屏幕范围偏好 | guard 每次调用现读用户范围，未设置默认 all、损坏回退 virtual-only，越界即结构化拒绝并给引导",
     "P02 -> 引擎 WebView 面 | android_web_dump 与 webAction 读壳自有 WebView 而非设备屏，故刻意不进 SCREEN_ACTIONS",
     "P02 -> 引擎工具面 | defineTool 的 output.schema 与返回值受引擎整值校验，注册完整性由源码级门禁守",
     "P02 -> 授权桥与控制队列 | guard 经 androidPrivilege 的 bindSession 与 gateFor 做会话绑定和档位门，服务缺失即 fail-closed 桩",
