@@ -83,11 +83,13 @@ UI   dsh-client-ui-responsive · dev-section/extensions.tsx
 
 ## 8. 未做 / 下一步
 
-- **工具依赖声明**：已做（a11y / shizuku）。技能可在清单声明 `requires: ["a11y" | "shizuku"]`，
-  服务端只保留这两个值，未知值丢弃并记 warning、不拒绝整条条目。界面判定口径：无障碍读
-  `a11yStatus()` 的 `enabled`、Shizuku 读 `shizukuStatus()` 的 `granted`，只有明确 `true`
-  才算满足；桥缺席（桌面宿主）或字段读不到按满足处理（不误伤），但不会显示「已满足」标记。
-  明确为 `false` 时在安装前给出警示徽标并禁用安装，同时提供「去开启」入口。
+- **工具依赖声明**：已做（a11y / shizuku / real-screen）。技能可在清单声明
+  `requires: ["a11y" | "shizuku" | "real-screen"]`，服务端只保留这三个值，未知值丢弃并记 warning、
+  不拒绝整条条目。界面判定口径：无障碍读 `a11yStatus()` 的 `enabled`、Shizuku 读
+  `shizukuStatus()` 的 `granted`、真实屏幕读 `getScreenScope()`（`virtual-only` 才算缺，
+  `real-only`/`all` 都算满足），只有明确否定才算不满足；桥缺席（桌面宿主）或字段读不到按满足处理
+  （不误伤），但不会显示「已满足」标记。不满足时在安装前给出警示徽标并禁用安装：
+  a11y/Shizuku 给「去开启」跳系统页，real-screen 在本页直接 `setScreenScope('all')`（用户点按即明确同意）。
 - **付款类动作的硬拦截**：已做（无障碍通道）。`DeviceControlService` 在 click / longClick
   真正执行前调用 `PaymentGuard`（纯函数、JVM 单测）：只在淘宝 / 天猫包内生效，命中
   「提交订单 / 结算 / 付款 / 支付 / 退款 / 退货 / 确认收货 / 删除订单 / 修改收货地址」

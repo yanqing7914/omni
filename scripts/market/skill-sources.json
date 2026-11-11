@@ -130,7 +130,7 @@
       },
       "category": "shopping",
       "license": "MIT",
-      "requires": ["a11y"],
+      "requires": ["a11y", "real-screen"],
       "local": true,
       "source": {
         "ref": "main",

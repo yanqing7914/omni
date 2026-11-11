@@ -15,6 +15,10 @@ user-invocable: true
 如果无障碍服务没有打开，`android_ui_tree` 会返回空或失败——这时直接告诉用户：
 「需要到系统设置 → 无障碍里打开 Omni 的服务」，不要改用截图硬猜坐标。
 
+淘宝装在真实屏幕上，所以还需要用户把**屏幕范围**放开：如果工具返回
+`screen-out-of-scope`，或提示「开放屏幕范围为 virtual-only」，不要反复重试，直接让用户到
+**设置 → 扩展 → 技能 → 淘宝 App 购物** 点「允许真实屏幕」，然后继续。
+
 ## 基本流程
 
 1. `android_app_launch` 启动淘宝（包名 `com.taobao.taobao`，天猫是 `com.tmall.wireless`）。

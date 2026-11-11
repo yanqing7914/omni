@@ -1002,11 +1002,89 @@ describe('R7 已安装但依赖不满足', () => {
   })
 })
 
+// ── R10–R12 真实屏幕范围 ──────────────────────────────────────────────────
+
+function scopeBridge(initial: 'virtual-only' | 'real-only' | 'all') {
+  let scope = initial
+  const setScreenScope = vi.fn((next: 'virtual-only' | 'real-only' | 'all') => {
+    scope = next
+    return next
+  })
+  vi.stubGlobal('androidBridge', {
+    getScreenScope: () => scope,
+    setScreenScope,
+  })
+  return { setScreenScope, current: () => scope }
+}
+
+function screenMarket() {
+  return {
+    '/api/skillmarket/installed': () => ({ body: [] }),
+    '/api/skillmarket/list': () => ({ body: marketWithRequires(['real-screen']) }),
+  }
+}
+
+describe('R10 真实屏幕依赖', () => {
+  it('virtual-only → 徽标、安装禁用；点「允许真实屏幕」后回读消失', async () => {
+    const bridge = scopeBridge('virtual-only')
+    vi.stubGlobal('fetch', makeFetch(screenMarket()).impl)
+    const el = await render()
+
+    const target = row(el, 'docx')
+    expect(requiredBadge(el, 'docx', 'real-screen')).not.toBeNull()
+    expect(target.textContent).toContain('需要访问真实屏幕')
+    expect(buttonByText(target, '安装').disabled).toBe(true)
+
+    await act(async () => { buttonByText(target, '允许真实屏幕').click() })
+    expect(bridge.setScreenScope).toHaveBeenCalledWith('all')
+    await settle(2)
+
+    expect(requiredBadge(el, 'docx', 'real-screen')).toBeNull()
+    expect(buttonByText(row(el, 'docx'), '安装').disabled).toBe(false)
+  })
+})
+
+describe('R11 范围已放开不新增节点', () => {
+  it('real-only / all → 无徽标、可安装', async () => {
+    for (const scope of ['real-only', 'all'] as const) {
+      scopeBridge(scope)
+      vi.stubGlobal('fetch', makeFetch(screenMarket()).impl)
+      const el = await render()
+
+      expect(requiredBadge(el, 'docx', 'real-screen')).toBeNull()
+      expect(buttonByText(row(el, 'docx'), '安装').disabled).toBe(false)
+
+      await unmountCurrent()
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    }
+  })
+})
+
+describe('R12 范围读不到', () => {
+  it('桥缺席或没有 getScreenScope → 不误伤', async () => {
+    for (const bridge of [undefined, {} as Record<string, unknown>]) {
+      vi.stubGlobal('androidBridge', bridge)
+      vi.stubGlobal('fetch', makeFetch(screenMarket()).impl)
+      const el = await render()
+
+      expect(requiredBadge(el, 'docx', 'real-screen')).toBeNull()
+      expect(buttonByText(row(el, 'docx'), '安装').disabled).toBe(false)
+
+      await unmountCurrent()
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    }
+  })
+})
+
 describe('R8 文案与样式', () => {
   it('新增文案全部经 tr() 双语；新增样式只用 --dsw-* 变量', async () => {
     const source = readFileSync('src/client/dev-section/extensions.tsx', 'utf8')
     expect(source).toContain("tr('需要开启无障碍', 'Needs accessibility')")
     expect(source).toContain("tr('需要开启 Shizuku', 'Needs Shizuku')")
+    expect(source).toContain("tr('需要访问真实屏幕', 'Needs real screen')")
+    expect(source).toContain("tr('允许真实屏幕', 'Allow real screen')")
     expect(source).toContain("tr('去开启', 'Enable')")
 
     const css = readFileSync('src/client/dev-section/extensions.css.ts', 'utf8')

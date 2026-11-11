@@ -28,7 +28,7 @@ function routeByPath(routes, path) {
 }
 
 test('R1: valid requires survive; bad shapes drop only the invalid parts with a reason', () => {
-  const valid = makeSkill('valid', { 'SKILL.md': SKILL_MD }, { requires: ['a11y', 'shizuku'] })
+  const valid = makeSkill('valid', { 'SKILL.md': SKILL_MD }, { requires: ['a11y', 'shizuku', 'real-screen'] })
   const mixed = makeSkill('mixed', { 'SKILL.md': SKILL_MD }, { requires: ['a11y', 'sms', 'a11y'] })
   const notArray = makeSkill('not-array', { 'SKILL.md': SKILL_MD }, { requires: 'a11y' })
   const absent = makeSkill('absent', { 'SKILL.md': SKILL_MD })
@@ -39,7 +39,7 @@ test('R1: valid requires survive; bad shapes drop only the invalid parts with a 
   assert.equal(parsed.manifest.skills.length, 4)
   const byId = new Map(parsed.manifest.skills.map((skill) => [skill.id, skill]))
 
-  assert.deepEqual(byId.get('valid').requires, ['a11y', 'shizuku'], 'known values kept in order')
+  assert.deepEqual(byId.get('valid').requires, ['a11y', 'shizuku', 'real-screen'], 'known values kept in order')
   assert.deepEqual(byId.get('mixed').requires, ['a11y'], 'unknown values and duplicates dropped')
   assert.deepEqual(byId.get('not-array').requires, [], 'non-array degrades to empty')
   assert.deepEqual(byId.get('absent').requires, [], 'missing field defaults to empty')
