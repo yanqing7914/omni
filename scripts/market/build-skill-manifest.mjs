@@ -30,7 +30,7 @@ const DEFAULT_OUTPUT = join(REPO_ROOT, 'market', 'skills.json')
 const KEBAB = /^[a-z0-9][a-z0-9-]{0,63}$/
 const SHA256 = /^[a-f0-9]{64}$/
 /** 技能允许声明的能力依赖；与 plugins/dsh-skill-market/src/types.ts 的闭集一致。 */
-const KNOWN_REQUIREMENTS = new Set(['a11y', 'shizuku'])
+const KNOWN_REQUIREMENTS = new Set(['a11y', 'shizuku', 'real-screen'])
 const DOWNLOAD_CONCURRENCY = 8
 const DOWNLOAD_TIMEOUT_MS = 30_000
 

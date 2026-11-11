@@ -14,13 +14,16 @@ export interface Bilingual {
 }
 
 /**
- * 技能可选的能力依赖。只做这两个：无障碍与 Shizuku 是壳侧能可靠判定的通道；
+ * 技能可选的能力依赖。只做这三个：无障碍、Shizuku、真实屏幕范围是壳侧能可靠判定的通道；
  * 其它能力没有稳定的本地判据，声明了也只会变成假入口。
+ *
+ * real-screen 与另外两个不同：它不是系统权限，而是用户在本应用里选的屏幕范围（virtual-only /
+ * real-only / all）。淘宝这类「在真实屏上操作第三方 App」的技能，范围是 virtual-only 时必然用不了。
  */
-export type SkillRequirement = 'a11y' | 'shizuku'
+export type SkillRequirement = 'a11y' | 'shizuku' | 'real-screen'
 
 /** 解析时允许保留的能力依赖闭集；未知值丢弃而不是拒绝整条清单。 */
-export const SKILL_REQUIREMENTS: readonly SkillRequirement[] = ['a11y', 'shizuku']
+export const SKILL_REQUIREMENTS: readonly SkillRequirement[] = ['a11y', 'shizuku', 'real-screen']
 
 /** 一条「条目仍可用、但有字段被降级」的解析警告。 */
 export interface ManifestWarning {

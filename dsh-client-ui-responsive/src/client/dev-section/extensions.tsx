@@ -21,7 +21,7 @@ import { noticeDataAttrs, type Notice } from '../user-copy.ts'
 // ── 接口形态（以服务端实际返回为准） ───────────────────────────────────────
 
 /** 技能可声明的能力依赖闭集；与服务端 `SkillRequirement` 保持一致。 */
-type SkillRequirement = 'a11y' | 'shizuku'
+type SkillRequirement = 'a11y' | 'shizuku' | 'real-screen'
 
 interface InstalledSkill {
   id: string
@@ -228,7 +228,7 @@ function normalizeRequires(value: unknown): SkillRequirement[] {
   if (!Array.isArray(value)) return []
   const requires: SkillRequirement[] = []
   for (const item of value) {
-    if ((item === 'a11y' || item === 'shizuku') && !requires.includes(item)) requires.push(item)
+    if ((item === 'a11y' || item === 'shizuku' || item === 'real-screen') && !requires.includes(item)) requires.push(item)
   }
   return requires
 }
@@ -370,9 +370,16 @@ function sourceBadge(source: 'user' | 'bundled' | undefined): string {
 type RequirementState = 'met' | 'unmet' | 'unknown'
 
 function requirementBadgeLabel(requirement: SkillRequirement): string {
-  return requirement === 'a11y'
-    ? tr('需要开启无障碍', 'Needs accessibility')
-    : tr('需要开启 Shizuku', 'Needs Shizuku')
+  if (requirement === 'a11y') return tr('需要开启无障碍', 'Needs accessibility')
+  if (requirement === 'shizuku') return tr('需要开启 Shizuku', 'Needs Shizuku')
+  return tr('需要访问真实屏幕', 'Needs real screen')
+}
+
+/** 依赖未满足时的按钮文案：系统页跳转 vs 本页直接放行。 */
+function requirementActionLabel(requirement: SkillRequirement): string {
+  return requirement === 'real-screen'
+    ? tr('允许真实屏幕', 'Allow real screen')
+    : tr('去开启', 'Enable')
 }
 
 /** 读桥返回的 JSON；非字符串、解析失败或缺方法都归为「读不到」。 */
@@ -397,6 +404,17 @@ function readBridgeRecord(read: (() => string) | undefined): Record<string, unkn
 function readRequirement(requirement: SkillRequirement): RequirementState {
   const bridge = window.androidBridge
   if (bridge === undefined) return 'unknown'
+  // 屏幕范围不是 JSON 状态，而是三值枚举：virtual-only 才是「技能用不了真实屏」。
+  if (requirement === 'real-screen') {
+    let scope: unknown
+    try {
+      scope = bridge.getScreenScope?.()
+    } catch {
+      return 'unknown'
+    }
+    if (scope === 'virtual-only') return 'unmet'
+    return scope === 'real-only' || scope === 'all' ? 'met' : 'unknown'
+  }
   const record = requirement === 'a11y'
     ? readBridgeRecord(bridge.a11yStatus)
     : readBridgeRecord(bridge.shizukuStatus)
@@ -406,11 +424,12 @@ function readRequirement(requirement: SkillRequirement): RequirementState {
   return flag === true ? 'met' : 'unknown'
 }
 
-/** 打开系统侧开启入口；桥缺席时按钮仍可点，状态以下一次回读为准。 */
+/** 打开系统侧开启入口；屏幕范围由本页直接放行（点按本身就是明确同意）。 */
 function openRequirementSettings(requirement: SkillRequirement): void {
   try {
     if (requirement === 'a11y') window.androidBridge?.openA11ySettings?.()
-    else window.androidBridge?.openShizukuManager?.()
+    else if (requirement === 'shizuku') window.androidBridge?.openShizukuManager?.()
+    else window.androidBridge?.setScreenScope?.('all')
   } catch {
     /* 桌面宿主没有桥；不把异常冒到页面 */
   }
@@ -454,12 +473,14 @@ function SkillsPanel({ active }: { active: boolean }) {
   const [requirementStates, setRequirementStates] = useState<Record<SkillRequirement, RequirementState>>({
     a11y: 'unknown',
     shizuku: 'unknown',
+    'real-screen': 'unknown',
   })
 
   const refreshRequirements = useCallback((): void => {
     setRequirementStates({
       a11y: readRequirement('a11y'),
       shizuku: readRequirement('shizuku'),
+      'real-screen': readRequirement('real-screen'),
     })
   }, [])
 
@@ -898,9 +919,13 @@ function SkillsPanel({ active }: { active: boolean }) {
                               type="button"
                               className="dsh-dev-btn"
                               data-require-action={requirement}
-                              onClick={() => { openRequirementSettings(requirement) }}
+                              onClick={() => {
+                                openRequirementSettings(requirement)
+                                // 屏幕范围在本页改完就能回读；a11y/Shizuku 等用户从系统页回来再判定。
+                                if (requirement === 'real-screen') refreshRequirements()
+                              }}
                             >
-                              {tr('去开启', 'Enable')}
+                              {requirementActionLabel(requirement)}
                             </button>
                           ))}
                           <button

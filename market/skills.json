@@ -574,7 +574,8 @@
       "category": "shopping",
       "license": "MIT",
       "requires": [
-        "a11y"
+        "a11y",
+        "real-screen"
       ],
       "source": {
         "owner": "yanqing7914",
@@ -585,8 +586,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "a3756a97c990870ddff015689aea37aacf290cccc85aa51e1003ae554c75e8e1",
-          "size": 3442
+          "sha256": "291d02ec8992fd17767f38d610d67ed3394357063c661a59139df8f71ec30dd9",
+          "size": 3758
         }
       ]
     }
