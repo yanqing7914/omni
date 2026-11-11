@@ -22,12 +22,12 @@ android {
     // Omni 版本规则：versionName 主.次.修订（修订号 0–99），versionCode = 主×10000 + 次×100 + 修订
     // （1.0.0 → 10000，1.0.99 → 10099，1.1.0 → 10100）。每次发版两者一起升：versionCode 决定能否覆盖安装，
     // UpdateChecker 用 isNewer(tag, versionName) 判断有没有新版。所有交付 APK 强制包含 v1/v2/v3 签名。
-    versionCode = 10005
+    versionCode = 10006
     // Snapshot builds append a suffix (e.g. -SN-1-RC13) via -PversionNameSuffix; release builds pass none.
     val snapshotSuffix = providers.gradleProperty("versionNameSuffix").getOrElse("")
     // 版本号单一来源：UI（GuidePageRenderer）、桥（androidBridge.version）、诊断日志、引擎环境变量
     // （DSH_APP_VERSION，见 EngineManager.engineEnv）全部读这里，禁止任何地方再硬编码版本字面量。
-    versionName = "1.0.5" + snapshotSuffix
+    versionName = "1.0.6" + snapshotSuffix
     buildConfigField("String", "TERMUX_VERSION", "\"0.118.3\"")
     // 0.14.0-preview：虚拟屏 P0 建屏矩阵走仪器测试入口（app UID 下运行 = P0-6 要测的调用者身份），
     // 不新增任何产品面（Activity/Bridge/Manifest 均不动）。见 .deploy-tmp/iter-0140/vdisplay-p0.md §8.8。
