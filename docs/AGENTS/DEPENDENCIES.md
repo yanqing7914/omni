@@ -15,7 +15,7 @@
 ## 2. Gradle依赖
 
 <!-- generated:gradle-declarations:start -->
-当前源码声明：versionName `1.0.10` / versionCode `10010`；suffix 来自 Gradle 属性。此处不证明 APK 产物或验收状态。
+当前源码声明：versionName `1.0.11` / versionCode `10011`；suffix 来自 Gradle 属性。此处不证明 APK 产物或验收状态。
 
 | 配置 | 声明 |
 |---|---|

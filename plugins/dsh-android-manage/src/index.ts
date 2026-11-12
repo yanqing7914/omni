@@ -2102,7 +2102,23 @@ properties: {
         const r = await a11yExec('setText', payload)
         if (!r.ok) return { ...semanticFail(r, '无障碍输入失败：'), channel: 'a11y' } as never
         const act = [clear ? '已清空' : '', raw ? `已输入 ${raw.slice(0, 24)}${raw.length > 24 ? '…' : ''}` : ''].filter(Boolean).join(' + ')
-        return { ok: true, denied: false, channel: 'a11y', text: `${act}（无障碍通道 setText）` }
+        // 回读聚焦框：真机实测（2026-11-12）出现过「搜索框里是旧词+新词拼接」而工具只回「已输入」，
+        // 模型据此以为搜索完成。回读把真实内容带回给模型，不一致时明确标注。
+        let readBack: string | null = null
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 120))
+          const nt = await a11yExec('nodeText', { ...screenArgs(args) }, 4000)
+          if (nt.ok) readBack = ((nt.data ?? {}) as { text?: string }).text ?? ''
+        } catch { readBack = null }
+        const mismatch = raw.length > 0 && readBack !== null && readBack !== raw
+        return {
+          ok: true,
+          denied: false,
+          channel: 'a11y',
+          text: `${act}（无障碍通道 setText）`
+            + (readBack === null ? '' : `；回读「${readBack.slice(0, 40)}」`)
+            + (mismatch ? '——回读与输入不一致（输入框可能原有文字未被清空）。请先 android_ui_input clear:true 清空后重输，不要直接点搜索。' : ''),
+        }
       }
       if (!priv.execAdbShell) return { ok: false, denied: false, text: 'ADB 执行通道未接通' }
       const wantKb = channel !== 'input'
