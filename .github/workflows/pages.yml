@@ -8,6 +8,7 @@
 #   - push 到 main 且 webpages/** 或本工作流变化：站点源码改动即部署
 #   - release(published): refresh after a draft becomes publicly downloadable
 #   - workflow_dispatch：手动补部署
+#   还没有正式版 Release 时，check job 让整条链跳过而不是判红。
 #
 # 权限最小化：contents: read 只读源码；pages/id-token 仅部署 job 持有。
 name: pages
@@ -38,7 +39,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 还没有正式版 Release 时整条链跳过（不判红）：下载站只展示已发布的版本，
+  # 没有 Release 就没有可展示的东西，build.mjs --refresh 会因 releases/latest 404 失败。
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      has_release: ${{ steps.probe.outputs.has_release }}
+    steps:
+      - id: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/releases/latest" --silent 2>/dev/null; then
+            echo "has_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::还没有正式版 Release，跳过下载站构建与部署"
+            echo "has_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: [check]
+    if: needs.check.outputs.has_release == 'true'
     runs-on: ubuntu-latest
     # 该链实测整链约 30 秒（见文件头注释），15 分钟已是 30 倍余量。
     timeout-minutes: 15

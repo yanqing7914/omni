@@ -53,7 +53,7 @@
     "plugins/dsh-android-vdisplay/test/tools-callable.test.mjs:122": 3,
     "scripts/build-apk-013.ps1:141": 3,
     "MainActivity.kt:619": 1,
-    "GuidePageRenderer.kt:363": 1,
+    "GuidePageRenderer.kt:371": 1,
     "EngineStartFlow.kt:96": 1,
     "MainActivity.kt:422": 1,
     "DeviceControlService.kt:852": 1,
@@ -84,7 +84,7 @@
     "EngineStartFlow.kt:497": 1,
     "app/src/main/java/com/omnifarious/omniagent/SnapshotExtractor.kt:81": 1,
     "AndroidBridge.kt:431": 2,
-    "app/build.gradle.kts:175": 2,
+    "app/build.gradle.kts:197": 2,
     "BrowserHostNavigationPolicyTest.kt:129": 2,
     "ControlAudit.kt:34": 2,
     "ControlProtocolV2.kt:196": 2,
@@ -181,7 +181,7 @@
     "NotifyCenter.kt:829": 3,
     "NotifyStore.kt:18": 3,
     "NotifyCenter.kt:631": 3,
-    "app/build.gradle.kts:93": 1,
+    "app/build.gradle.kts:115": 1,
     "app/src/test/java/com/omnifarious/omniagent/CallSiteContractTest.kt:294": 2,
     "app/src/test/java/com/omnifarious/omniagent/OverlayHaloInvariantTest.kt:92": 2,
     "app/src/test/java/com/omnifarious/omniagent/NotifyCenterChannelTest.kt:33": 2,
@@ -404,7 +404,7 @@
     "app/src/main/java/com/omnifarious/omniagent/UndoGate.kt:278": 1,
     "app/src/main/java/com/omnifarious/omniagent/UndoGate.kt:136": 1,
     "scripts/check-bridge-symmetry.mjs:1": 1,
-    "app/build.gradle.kts:176": 1,
+    "app/build.gradle.kts:198": 1,
     "app/src/main/java/com/omnifarious/omniagent/ControlPoller.kt:158": 2,
     "app/src/main/java/com/omnifarious/omniagent/DeviceControlService.kt:652": 2,
     "app/src/main/java/com/omnifarious/omniagent/DeviceControlService.kt:770": 1,
@@ -461,7 +461,7 @@
     "scripts/profile-web.cordis.patch.yml:7": 1,
     "scripts/plugin-dirs.json:1": 1,
     "scripts/check-patch-mirror.mjs:109": 1,
-    ".github/workflows/build-apk-source.yml:134": 1,
+    ".github/workflows/build-apk-source.yml:141": 1,
     "scripts/source-build/reconcile-engine-patch-copies.mjs:58": 1,
     "scripts/source-build/check-dsh-source-snapshot.mjs:25": 1,
     "scripts/check-release-gates.mjs:167": 1,
@@ -493,7 +493,7 @@
     "VdisplayController.kt:326": 2,
     "docs/AGENTS/emulator-test-protocol.md:57": 2,
     "app/src/main/java/com/omnifarious/omniagent/ApkUpdateAction.kt:228": 1,
-    "GuidePageRenderer.kt:781": 1,
+    "GuidePageRenderer.kt:857": 1,
     "AndroidBridge.kt:619": 1,
     "UpdateCheckerTest.kt:393": 1,
     "ApkUpdateAction.kt:261": 1,
@@ -1012,7 +1012,7 @@
     "P02 -> ADBKeyboard 输入法 | 广播点名组件 `-n …/.AdbKeyboardReceiver` 并带 nonce auth；壳侧按 `getSentFromUid()`（root/adb shell）或 nonce 校验，结果码写回广播（1 已提交/2 未就绪/3 被拒/4 请求不合法/5 无连接），引擎据结果码判真实落地",
     "P02 -> vdisplay 工具面 | 失败文案把模型引到 android_vdisplay_input 与 android_vdisplay_status 承接坐标与状态",
     "P02 -> 审计面 | priv.audit 写 files/audit/audit.ndjson，与 bridge 和壳侧 ControlAudit 同路径同格式",
-    "P02 -> 屏幕范围偏好 | guard 每次调用现读用户范围，默认 virtual-only，越界即结构化拒绝并给引导",
+    "P02 -> 屏幕范围偏好 | guard 每次调用现读用户范围，未设置默认 all、损坏回退 virtual-only，越界即结构化拒绝并给引导",
     "P02 -> 引擎 WebView 面 | android_web_dump 与 webAction 读壳自有 WebView 而非设备屏，故刻意不进 SCREEN_ACTIONS",
     "P02 -> 引擎工具面 | defineTool 的 output.schema 与返回值受引擎整值校验，注册完整性由源码级门禁守",
     "P02 -> 授权桥与控制队列 | guard 经 androidPrivilege 的 bindSession 与 gateFor 做会话绑定和档位门，服务缺失即 fail-closed 桩",
@@ -1046,7 +1046,7 @@
     "S01 -> 门禁脚本 | 注入类缺陷三条防线之二由 smoke-injections.mjs 与 boot-watchdog.test.mjs 常驻，脚本与源码脱同步即整条红"
   ],
   "sourceLines": {
-    ".github/workflows/build-apk-source.yml:134": [
+    ".github/workflows/build-apk-source.yml:141": [
       "if [ ! -d .deploy-tmp/deepseek-harness/.git ]; then"
     ],
     "0.13.7-CERTIFICATION.md:11": [
@@ -1298,10 +1298,10 @@
     "GlobalActionCatalog.kt:47": [
       "* ③ 其余：系统列表为空（部分 ROM 不报）时按 API 下限放行，非空时以系统列表为准。"
     ],
-    "GuidePageRenderer.kt:363": [
+    "GuidePageRenderer.kt:371": [
       "// 旧实现的更新状态是本类的私有字段，视图一被 showWeb() 藏起来状态就不可达，这正是"
     ],
-    "GuidePageRenderer.kt:781": [
+    "GuidePageRenderer.kt:857": [
       "when (presentation) {"
     ],
     "LogCollector.kt:405": [
@@ -1916,13 +1916,13 @@
     "WebUiChrome.kt:37": [
       "* 定案靠设备层 A/B。本仓实测（Medium_Phone 1080x2400 / 420dpi / 手势条）：改前导航条 inset"
     ],
-    "app/build.gradle.kts:175": [
+    "app/build.gradle.kts:197": [
       "androidTestImplementation(\"androidx.test.ext:junit:1.2.1\")"
     ],
-    "app/build.gradle.kts:176": [
+    "app/build.gradle.kts:198": [
       "androidTestImplementation(\"androidx.test:runner:1.6.2\")"
     ],
-    "app/build.gradle.kts:93": [
+    "app/build.gradle.kts:115": [
       "jvmTarget = \"17\""
     ],
     "app/src/main/AndroidManifest.xml:158": [
@@ -3647,9 +3647,6 @@
     "scripts/check-snapshot-builder-output.mjs:156": [
       "const writesTar = text.includes(\"join(OUT_DIR, 'snapshot.tar.xz')\")"
     ],
-    "scripts/check-tool-output-schema.mjs:153": [
-      "{"
-    ],
     "scripts/check-tool-output-schema.mjs:7": [
       "//   1) lib/ 时效检查：任一 src/*.ts 比 lib/*.js 新只是**触发**，真伪由重建哈希裁决"
     ],
@@ -3895,6 +3892,9 @@
     ],
     "NotifyStore.kt:421": [
       "heartbeat(app, trigger, offset, len)"
+    ],
+    "scripts/check-tool-output-schema.mjs:154": [
+      "{"
     ]
   },
   "symbols": {

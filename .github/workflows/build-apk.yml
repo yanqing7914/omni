@@ -42,6 +42,7 @@ jobs:
   source-audit:
     if: ${{ inputs.source_audit }}
     uses: ./.github/workflows/build-apk-source.yml
+    secrets: inherit
 
   build:
     if: ${{ !inputs.source_audit }}
@@ -56,6 +57,10 @@ jobs:
     env:
       # build-apk.mjs 依赖本仓库顶层 scripts/plugins/vendor/base；apk 仓库 = $GITHUB_WORKSPACE
       DSH_APK_DIR: ${{ github.workspace }}
+      # 正式发布密钥（GitHub Secrets）；restore-release-key.sh 还原后导出 OMNI_RELEASE_KEYSTORE 路径。
+      OMNI_RELEASE_KEYSTORE_BASE64: ${{ secrets.OMNI_RELEASE_KEYSTORE_BASE64 }}
+      OMNI_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.OMNI_RELEASE_KEYSTORE_PASSWORD }}
+      OMNI_RELEASE_KEY_ALIAS: ${{ secrets.OMNI_RELEASE_KEY_ALIAS }}
     steps:
       # 每个 ABI job 只需要本 ABI 的 base-usr 与共用 base-dsh；先缓存，未命中才按路径拉取。
       # checkout 的 lfs:true 是按 ref fetch，不能从 fetch-depth:0 推断它会下载历史全部 LFS。
@@ -65,19 +70,17 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
           lfs: false
-      - name: 缓存底座归档（命中则跳过 LFS 拉取）
+      - name: 缓存底座归档（命中则跳过下载）
         id: lfs-base
         uses: actions/cache@v4
         with:
           path: base
-          key: lfsbase-${{ matrix.abi }}-${{ hashFiles(format('base/base-dsh.tar.xz'), format('base/base-usr-{0}.tar.xz', matrix.abi)) }}
-      - name: 按需拉取 LFS 底座（仅本 ABI，未命中缓存时）
-        if: steps.lfs-base.outputs.cache-hit != 'true'
+          key: base-v1-${{ matrix.abi }}-${{ hashFiles(format('base/base-dsh.tar.xz'), format('base/base-usr-{0}.tar.xz', matrix.abi)) }}
+      - name: 从 base-v1 Release 下载底座（仅本 ABI；按 pointer 里的 sha256 校验）
         shell: bash
-        run: |
-          set -e
-          git lfs install --local
-          git lfs pull --include="base/base-usr-${{ matrix.abi }}.tar.xz,base/base-dsh.tar.xz"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/fetch-base.sh "${{ matrix.abi }}"
       - name: 断言底座确实已落地（拒绝 LFS pointer 冒充文件）
         shell: bash
         run: |
@@ -96,6 +99,37 @@ jobs:
       - name: 准备 Java（gradle 需要）
         uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
+      - name: 还原正式发布密钥
+        shell: bash
+        run: bash scripts/ci/restore-release-key.sh
+
+      # check-dead-tokens / check-contract 以上游树为判据面（contract.upstreamRepo）；缺席时 dead-tokens exit 2。
+      # 与 build-apk-source.yml 同一步骤，提交与标签都取自 scripts/contract.json。
+      - name: 检出钉住的 DeepSeek Harness 上游树（门禁判据面）
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .deploy-tmp
+          # 已存在则复用：CI 每轮全新目录，本地复跑却会撞 `destination path already exists`。
+          # 下面几条 fetch/checkout 本身幂等，只有 clone 不是，故只守这一条。
+          if [ ! -d .deploy-tmp/deepseek-harness/.git ]; then
+            git clone --filter=blob:none --no-checkout --depth=1 https://github.com/deepseek-ai/deepseek-harness.git .deploy-tmp/deepseek-harness
+          fi
+          # 合同是唯一真源（0.14.8 起不再写死）：写死的提交/标签会在每次引擎追版后静默失效。
+          COMMIT=$(node -p 'require("./scripts/contract.json").upstream.commit')
+          TAG=$(node -p 'require("./scripts/contract.json").baseline')
+          git -C .deploy-tmp/deepseek-harness fetch --depth=1 origin "$COMMIT"
+          git -C .deploy-tmp/deepseek-harness fetch --depth=1 origin "refs/tags/dsh-v$TAG:refs/tags/dsh-v$TAG"
+          # A previous interrupted build may have modified tracked inputs before this checkout.
+          # Reset only this dedicated source checkout; preserve ignored dependency caches.
+          # 用 checkout -f 丢弃改动：刚 --no-checkout 克隆时索引为空，`checkout -- .` 会报 pathspec 不匹配。
+          test "$(realpath .deploy-tmp/deepseek-harness)" = "$(realpath .)/.deploy-tmp/deepseek-harness"
+          git -C .deploy-tmp/deepseek-harness checkout -f --detach "$COMMIT"
+          git -C .deploy-tmp/deepseek-harness clean -fdq
+          test "$(git -C .deploy-tmp/deepseek-harness rev-parse HEAD)" = "$COMMIT"
+          test "$(git -C .deploy-tmp/deepseek-harness describe --tags --always)" = "dsh-v$TAG"
+          node -e 'const c=require("./scripts/contract.json"); if(c.upstreamRepo!==".deploy-tmp/deepseek-harness" || !c.baseline || !c.upstream.commit) throw Error("source workflow identity does not match contract")'
+          node -e 'const c=require("./scripts/contract.json"), p=require("./.deploy-tmp/deepseek-harness/package.json"); if(!c.upstream.packageManager || !c.upstream.enginesNode || p.version!==c.baseline || p.packageManager!==c.upstream.packageManager || p.engines.node!==c.upstream.enginesNode) throw Error("official Harness runtime policy changed")'
 
       - name: 准备并构建插件（统一清单、锁解析与单次构建）
         shell: bash
@@ -128,6 +162,15 @@ jobs:
           set -e
           node scripts/build-snapshot-013.mjs "${{ matrix.abi }}"
 
+      - name: Kotlin 单测（check-kotlin-test-count 的输入）
+        shell: bash
+        run: |
+          set -e
+          # build-apk.mjs 的聚合门禁里 check-kotlin-test-count.mjs 按设计在没有 gradle 结果时判红
+          # （拒绝「一个用例都没跑」冒充通过）。release.yml 与 build-apk-source.yml 都在 APK 步前跑本步。
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest --no-daemon --console=plain
+
       - name: 构建 APK ${abi}（注入插件 + 门禁 + gradle + 产物）
         shell: bash
         run: |
@@ -141,10 +184,9 @@ jobs:
           node scripts/check-apk-signatures.mjs --self-test
           mapfile -t apks < <(find out -type f -name '*.apk' | sort)
           [ "${#apks[@]}" -eq 1 ] || { echo "::error::当前 ABI 产物数不是 1: ${#apks[@]}"; exit 1; }
-          # keystore 凭据必须显式声明（issue #1031）：门禁不再回落到 androiddebugkey/android。
-          # 这里是仓库那份 keystore/debug.keystore 的公开凭据，与 app/build.gradle.kts 的 repoDebug 同源。
-          node scripts/check-apk-signatures.mjs --apk "${apks[0]}" --keystore keystore/debug.keystore \
-            --keystore-alias androiddebugkey --keystore-pass android
+          # keystore 凭据必须显式声明（issue #1031）：用正式发布密钥交叉核对，口令来自 secrets。
+          node scripts/check-apk-signatures.mjs --apk "${apks[0]}" --keystore "$OMNI_RELEASE_KEYSTORE" \
+            --keystore-alias "$OMNI_RELEASE_KEY_ALIAS" --keystore-pass "$OMNI_RELEASE_KEYSTORE_PASSWORD"
 
       - name: 上传 APK 产物（本地下载 debug；不出 Release）
         uses: actions/upload-artifact@v4

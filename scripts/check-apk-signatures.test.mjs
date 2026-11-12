@@ -116,10 +116,13 @@ test('Gradle debug and release variants explicitly use the all-schemes signing c
   const gradlePath = candidates.find((candidate) => existsSync(candidate))
   assert.ok(gradlePath, 'app/build.gradle.kts must exist in the APK tree')
   const gradle = readFileSync(gradlePath, 'utf8')
-  const signing = /create\("repoDebug"\)\s*\{([\s\S]*?)\n\s*\}/.exec(gradle)?.[1] ?? ''
-  for (const scheme of ['V1', 'V2', 'V3']) assert.match(signing, new RegExp(`enable${scheme}Signing\\s*=\\s*true`))
-  assert.match(gradle, /release\s*\{\s*isMinifyEnabled\s*=\s*false\s*signingConfig\s*=\s*signingConfigs\.getByName\("repoDebug"\)/)
-  assert.match(gradle, /debug\s*\{\s*signingConfig\s*=\s*signingConfigs\.getByName\("repoDebug"\)/)
+  // 两个签名档（正式发布密钥 omniRelease、仓库兜底 repoDebug）都必须显式开 v1/v2/v3。
+  for (const name of ['omniRelease', 'repoDebug']) {
+    const signing = new RegExp(`create\\("${name}"\\)\\s*\\{([\\s\\S]*?)\\n\\s*\\}`).exec(gradle)?.[1] ?? ''
+    for (const scheme of ['V1', 'V2', 'V3']) assert.match(signing, new RegExp(`enable${scheme}Signing\\s*=\\s*true`), `${name} 缺 ${scheme}`)
+  }
+  assert.match(gradle, /release\s*\{\s*isMinifyEnabled\s*=\s*false\s*signingConfig\s*=\s*signingConfigs\.getByName\(shippingSigning\)/)
+  assert.match(gradle, /debug\s*\{\s*signingConfig\s*=\s*signingConfigs\.getByName\(shippingSigning\)/)
 })
 // ─── 期望证书的独立锚（issue #1031 的另一半）────────────────────────────────
 // 真因：此前「期望证书」就是 --keystore 那把钥匙本身，锚与被检对象同源 —— 换个 --keystore
@@ -127,7 +130,7 @@ test('Gradle debug and release variants explicitly use the all-schemes signing c
 
 test('锚文件里的摘要必须等于已 pin 的不变量常量', () => {
   assert.match(PINNED_EXPECTED_CERT_SHA256, /^[0-9a-f]{64}$/)
-  assert.equal(PINNED_EXPECTED_CERT_SHA256, '1beff7e88ac944fceda8c79467e4b3e89c721f12572d07f58870bd75526b59fa')
+  assert.equal(PINNED_EXPECTED_CERT_SHA256, 'a9f1200f7f4abe3a7976cbbf688bc31e3b04ccdbdf14d95c8f5c727e60c8c1d5')
   const anchor = loadCertificateAnchor()
   assert.equal(anchor.ok, true, anchor.problems.join(' '))
   assert.equal(anchor.digest, PINNED_EXPECTED_CERT_SHA256)
@@ -219,12 +222,18 @@ test('CLI 负控：--expected-cert 指向不存在的文件 -> exit 1（锚缺�
   assert.match(result.stderr, /锚文件缺失或不可读/)
 })
 
-test('CLI 放行例：默认锚可用时不会因锚判红（只在缺 apksigner 处止步）', () => {
+// 放行例需要一把与锚一致的 keystore，也就是正式发布密钥。它不在仓库里：本机 source ~/.omni-release/env.sh、
+// CI 由 restore-release-key.sh 还原后才有；缺席时显式 skip，不拿仓库 debug keystore 冒充。
+const RELEASE_KEY = process.env.OMNI_RELEASE_KEYSTORE && process.env.OMNI_RELEASE_KEY_ALIAS && process.env.OMNI_RELEASE_KEYSTORE_PASSWORD
+  ? { keystore: process.env.OMNI_RELEASE_KEYSTORE, alias: process.env.OMNI_RELEASE_KEY_ALIAS, pass: process.env.OMNI_RELEASE_KEYSTORE_PASSWORD }
+  : null
+
+test('CLI 放行例：默认锚可用时不会因锚判红（只在缺 apksigner 处止步）', { skip: RELEASE_KEY ? false : '没有正式发布密钥环境变量（OMNI_RELEASE_*）' }, () => {
   // 本机/CI 净检出通常没有 Android SDK：那条红是环境面，不是锚面 —— 用它证明锚这一关确实过了。
   const result = spawnSync(process.execPath, [
     fileURLToPath(new URL('./check-apk-signatures.mjs', import.meta.url)),
-    '--apk', 'final.apk', '--keystore', 'keystore/debug.keystore', '--keystore-alias', 'androiddebugkey',
-    '--keystore-pass', 'android', '--apksigner', join(tmpdir(), 'no-such-apksigner-xyz'),
+    '--apk', 'final.apk', '--keystore', RELEASE_KEY.keystore, '--keystore-alias', RELEASE_KEY.alias,
+    '--keystore-pass', RELEASE_KEY.pass, '--apksigner', join(tmpdir(), 'no-such-apksigner-xyz'),
   ], { encoding: 'utf8' })
   assert.equal(result.status, 1)
   assert.doesNotMatch(result.stderr, /期望证书锚/)

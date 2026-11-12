@@ -5,8 +5,12 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { BUILD_TYPES, assembleApk, parseArgs, verifyApks, resolveEngineKeystoreCredentials } from './build-apk-engine.mjs'
+import { BUILD_TYPES, OMNI_RELEASE_KEY_ENV, assembleApk, parseArgs, verifyApks, resolveEngineKeystore, resolveEngineKeystoreCredentials } from './build-apk-engine.mjs'
 import { evaluateBadging } from './check-apk-form.mjs'
+
+// 这些用例断言「没有正式发布密钥时」的默认值。本机 source 过 ~/.omni-release/env.sh、或 CI 作业注入了
+// secrets 时，环境里会带 OMNI_RELEASE_*，所以在本文件内先清掉，保证结果不随运行环境变化。
+for (const name of Object.values(OMNI_RELEASE_KEY_ENV)) delete process.env[name]
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'dsh-build-engine-'))
@@ -392,4 +396,19 @@ test('引擎显式凭据覆盖：换发布钥的调用方不必改代码', () =>
   const verify = calls.find((args) => args.includes('--keystore'))
   assert.equal(verify[verify.indexOf('--keystore-alias') + 1], 'releasekey')
   assert.equal(verify[verify.indexOf('--keystore-pass') + 1], 'S3cret-Release')
+})
+
+test('正式发布密钥环境变量齐全时，引擎用它做 keystore 与凭据；缺任一个就回到仓库 debug keystore', () => {
+  const env = { OMNI_RELEASE_KEYSTORE: '/keys/omni-release.p12', OMNI_RELEASE_KEY_ALIAS: 'omni-release', OMNI_RELEASE_KEYSTORE_PASSWORD: 'p' }
+  assert.equal(resolveEngineKeystore({ env }), '/keys/omni-release.p12')
+  assert.deepEqual(resolveEngineKeystoreCredentials({ env }), { alias: 'omni-release', pass: 'p' })
+  // 显式参数与 DSH_APK_KEYSTORE_* 仍然优先。
+  assert.equal(resolveEngineKeystore({ keystore: '/x.jks', env }), '/x.jks')
+  assert.deepEqual(resolveEngineKeystoreCredentials({ env: { ...env, DSH_APK_KEYSTORE_ALIAS: 'a', DSH_APK_KEYSTORE_PASS: 'b' } }), { alias: 'a', pass: 'b' })
+  for (const missing of Object.keys(env)) {
+    const partial = { ...env }
+    delete partial[missing]
+    assert.match(resolveEngineKeystore({ env: partial }), /keystore[\\/]debug\.keystore$/)
+    assert.deepEqual(resolveEngineKeystoreCredentials({ env: partial }), { alias: 'androiddebugkey', pass: 'android' })
+  }
 })

@@ -210,6 +210,26 @@ test('test-only scope source cannot be overridden by an ordinary environment val
   assert.equal(currentScreenScope({ DSH_SCREEN_SCOPE_TEST: '1', DSH_SCREEN_SCOPE: 'all' }), 'all')
 })
 
+test('never-written scope prefs default to all; corrupt file stays fail-closed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-scope-default-'))
+  try {
+    // 文件不存在 = 用户从未设置过 → all（与壳侧 ScreenScope.fromStored 同口径）。
+    assert.equal(currentScreenScope({ DSH_SCREEN_SCOPE_PREFS_PATH: join(dir, 'missing.xml') }), 'all')
+
+    // 有文件但值损坏 → fail-closed 到 virtual-only，不能把数据异常当成默认放行。
+    const corrupt = join(dir, 'corrupt.xml')
+    writeFileSync(corrupt, '<map><string name="scope">bogus</string></map>')
+    assert.equal(currentScreenScope({ DSH_SCREEN_SCOPE_PREFS_PATH: corrupt }), 'virtual-only')
+
+    // 用户明确选过 virtual-only → 必须原样尊重。
+    const explicit = join(dir, 'explicit.xml')
+    writeFileSync(explicit, '<map><string name="scope">virtual-only</string></map>')
+    assert.equal(currentScreenScope({ DSH_SCREEN_SCOPE_PREFS_PATH: explicit }), 'virtual-only')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 // ── F1（0.14.1 块G）：执行点范围门禁必须按**目标屏**判定，而不是按 op 名一刀切 ──────────────
 //
 // 缺陷形态（用户实报，报文逐字吻合 index.ts:714）：范围 virtual-only、屏幕上确实建好了

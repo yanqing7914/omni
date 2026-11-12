@@ -69,15 +69,15 @@ function readImmersive(): boolean {
  * @param props - composed slot props (contract/slots.ts).
  * @returns the section element tree.
  */
-/** 账号插件默认的问卷地址（与 dsh-client-ui-settings-account 的 contactFormUrl 默认值一致）。 */
-const CONTACT_FORM_FALLBACK = 'https://trtgsjkv6r.feishu.cn/share/base/form/shrcnlCoGElW7MQznGy9r3YYXcg?hide_uid=1&hide_device_info=1&hide_harness_version=1'
+/** 账号插件未加载时的反馈入口：本仓库的 GitHub Issues。 */
+const CONTACT_FORM_FALLBACK = 'https://github.com/yanqing7914/omni/issues/new'
 
 /**
  * 打开意见反馈问卷。
  *
  * 优先走账号插件暴露的 `globalThis.__dshContactUs`——那样会带上它自己组装的上下文字段
  * （账号 uid、构建版本、device_info），与原来菜单项的行为完全一致。
- * 账号插件未加载（未登录/被禁用）时退回默认问卷地址，只带 hide_* 参数。
+ * 账号插件未加载（未登录/被禁用）时打开本仓库的 GitHub Issues。
  */
 function openFeedback(): void {
   const bridge = globalThis as { __dshContactUs?: () => void }

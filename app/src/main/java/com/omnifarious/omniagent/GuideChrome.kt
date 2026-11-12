@@ -26,6 +26,13 @@ internal class GuideChrome(
   val statusDot: View,
   val crashBanner: TextView,
   val progressBar: ProgressBar,
+  /**
+   * 进度区**唯一**的文本行：确定态是「42% · 预计还需 3 分钟」，不确定态是阶段句。
+   *
+   * 为什么不是三个 TextView（阶段句 / 百分比 / 剩余时间各一枚）：三枚并排会让同一件事
+   * 在同一屏上出现三处读数，正是用户反馈的「信息多、层次乱」。数字仍只来自
+   * RuntimeExtractProgress（见 formatProgressLine），这里只负责承载一行文本。
+   */
   val progressText: TextView,
   val logSummary: TextView,
   val logSection: View,
@@ -93,11 +100,17 @@ internal fun buildGuideChrome(activity: ComponentActivity, callbacks: GuideCallb
 
   val content = LinearLayout(activity).apply {
     orientation = LinearLayout.VERTICAL
+    // 竖排内容在视口内垂直居中；ScrollView 的 fillViewport 会把不足一屏的内容撑到一屏高，
+    // 这里才有可分配的多余高度。左右 32dp 是「状态与进度直接落在页面上」的最小安全边距。
+    gravity = Gravity.CENTER
+    setPadding(dpix(R.dimen.ds_space_32), dpix(R.dimen.ds_space_24), dpix(R.dimen.ds_space_32), dpix(R.dimen.ds_space_24))
   }
 
-  // —— Brand ——
+  // —— Brand：竖排居中（图标 → 标题 → 副标题 → 版本号）——
+  // 横排（图标 + 标题列 + 版本 pill 同处一行）是上一版的形态：三件事挤在一条基线上，
+  // 首屏第一眼读不出主次。竖排让「图标—名字—一句话」自成一个视觉锚点，且天然居中。
   val iconPlate = FrameLayout(activity).apply {
-    layoutParams = LinearLayout.LayoutParams(dpix(R.dimen.ds_logo_shell), dpix(R.dimen.ds_logo_shell))
+    layoutParams = LinearLayout.LayoutParams(dpix(R.dimen.ds_guide_logo_plate), dpix(R.dimen.ds_guide_logo_plate))
     background = DsUi.roundRect(
       color(R.color.ds_surface),
       dim(R.dimen.ds_radius_icon),
@@ -107,86 +120,80 @@ internal fun buildGuideChrome(activity: ComponentActivity, callbacks: GuideCallb
     addView(ImageView(activity).apply {
       setImageResource(R.mipmap.ic_launcher)
       layoutParams = FrameLayout.LayoutParams(
-        dpix(R.dimen.ds_logo_size), dpix(R.dimen.ds_logo_size), Gravity.CENTER,
+        dpix(R.dimen.ds_guide_logo_mark), dpix(R.dimen.ds_guide_logo_mark), Gravity.CENTER,
       )
     })
   }
 
-  val titleCol = LinearLayout(activity).apply {
-    orientation = LinearLayout.VERTICAL
-    gravity = Gravity.CENTER_VERTICAL
-    setPadding(dpix(R.dimen.ds_space_12), 0, 0, 0)
-    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-  }
-  titleCol.addView(TextView(activity).apply {
+  val titleView = TextView(activity).apply {
     text = activity.getString(R.string.app_name)
-    setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+    setTextSize(TypedValue.COMPLEX_UNIT_SP, 27f)
     setTextColor(color(R.color.ds_text_primary))
     typeface = typeMedium()
     letterSpacing = 0f
-  })
-  titleCol.addView(TextView(activity).apply {
-    text = activity.getString(R.string.ds_brand_subtitle)
-    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-    setTextColor(color(R.color.ds_text_secondary))
-    setPadding(0, dp(2f), 0, 0)
-  })
-  // S1-13：首屏此前对「这是什么 / 为什么要授权」零解释——用户第一次打开只看到品牌名与
-  // 「内嵌运行时」，随后被要求授权存储，却没有任何一句话说明这是干什么的、权限用来做什么。
-  // 这里补一行**事实陈述**（不是营销文案）：能力面 + 权限面各一句。
-  val explanation = TextView(activity).apply {
+    gravity = Gravity.CENTER
+    layoutParams = LinearLayout.LayoutParams(
+      ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+    ).apply { topMargin = dpix(R.dimen.ds_space_20) }
+  }
+
+  // 能力说明就是副标题：首屏只保留这一句话，不再另起一行「内嵌运行时」+ 解释行。
+  // 文案仍是 ds_brand_explain（中英成对），内容按用户选定的方向收敛成一句可读的事实陈述。
+  val subtitleView = TextView(activity).apply {
     text = activity.getString(R.string.ds_brand_explain)
     setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
     setTextColor(color(R.color.ds_text_secondary))
+    gravity = Gravity.CENTER
     setLineSpacing(0f, 1.25f)
-    setPadding(0, dp(4f), 0, 0)
+    layoutParams = LinearLayout.LayoutParams(
+      ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+    ).apply { topMargin = dpix(R.dimen.ds_space_8) }
   }
 
   val versionLabel = TextView(activity).apply {
     setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
     setTextColor(color(R.color.ds_text_tertiary))
     typeface = typeMedium()
+    gravity = Gravity.CENTER
     background = DsUi.roundRect(
-      android.graphics.Color.TRANSPARENT,
+      color(R.color.ds_surface),
       dim(R.dimen.ds_radius_pill),
       color(R.color.ds_hairline),
       hairline,
     )
-    setPadding(dp(10f), dp(5f), dp(10f), dp(5f))
+    setPadding(dp(10f), dp(4f), dp(10f), dp(4f))
     // S1-14：长版本号（v0.13.7fx-1、带后缀的验收包 v0.14.1-SN-1-13）此前**无 ellipsize**，
     // 在窄屏上会把左侧标题挤成两行。单行 + 省略号 + 宽度上限（屏幕 34%），标题优先。
     maxLines = 1
     ellipsize = TextUtils.TruncateAt.END
     maxWidth = (res.displayMetrics.widthPixels * 0.34f).toInt()
+    layoutParams = LinearLayout.LayoutParams(
+      ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+    ).apply { topMargin = dpix(R.dimen.ds_space_12) }
   }
 
   val brandBlock = LinearLayout(activity).apply {
-    orientation = LinearLayout.HORIZONTAL
-    gravity = Gravity.CENTER_VERTICAL
+    orientation = LinearLayout.VERTICAL
+    gravity = Gravity.CENTER_HORIZONTAL
     val lp = LinearLayout.LayoutParams(
       ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
     )
-    lp.bottomMargin = dpix(R.dimen.ds_space_24)
+    lp.bottomMargin = dpix(R.dimen.ds_space_40)
     layoutParams = lp
   }
   brandBlock.addView(iconPlate)
-  brandBlock.addView(titleCol)
+  brandBlock.addView(titleView)
+  brandBlock.addView(subtitleView)
   brandBlock.addView(versionLabel)
   content.addView(brandBlock)
-  content.addView(explanation, LinearLayout.LayoutParams(-1, -2).apply {
-    bottomMargin = dpix(R.dimen.ds_space_16)
-  })
 
-  // —— Status card ——
+  // —— Status：不再有卡片外观 ——
+  // 上一版把状态、说明、进度、日志全部装进一张圆角描边卡：用户反馈「不美观」的直接来源是
+  // 一张深色/浅色底块把本可以留白的内容切成两截。现在容器只负责纵向排列，背景/描边/圆角
+  // 全部由页面画布（ds_bg）承担，内容直接落在页面上。
   val card = LinearLayout(activity).apply {
     orientation = LinearLayout.VERTICAL
-    setPadding(dpix(R.dimen.ds_space_24), dp(24f), dpix(R.dimen.ds_space_24), dp(24f))
-    background = DsUi.roundRect(
-      color(R.color.ds_surface),
-      dim(R.dimen.ds_radius_card),
-      color(R.color.ds_hairline),
-      hairline,
-    )
+    gravity = Gravity.CENTER_HORIZONTAL
     val lp = LinearLayout.LayoutParams(
       ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
     )
@@ -202,17 +209,20 @@ internal fun buildGuideChrome(activity: ComponentActivity, callbacks: GuideCallb
     background = DsUi.oval(color(R.color.ds_text_tertiary))
   }
   val engineStatus = TextView(activity).apply {
-    setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+    setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
     setTextColor(color(R.color.ds_text_primary))
     typeface = typeMedium()
     letterSpacing = 0f
+    gravity = Gravity.CENTER
     setLineSpacing(0f, 1.2f)
-    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    layoutParams = LinearLayout.LayoutParams(
+      ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+    )
   }
   val statusRow = LinearLayout(activity).apply {
     visibility = View.GONE
     orientation = LinearLayout.HORIZONTAL
-    gravity = Gravity.CENTER_VERTICAL
+    gravity = Gravity.CENTER
   }
   statusRow.addView(statusDot)
   statusRow.addView(engineStatus)
@@ -222,7 +232,8 @@ internal fun buildGuideChrome(activity: ComponentActivity, callbacks: GuideCallb
     setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
     setTextColor(color(R.color.ds_text_secondary))
     setLineSpacing(0f, 1.35f)
-    setPadding(dp(16f), dpix(R.dimen.ds_space_8), 0, 0)
+    gravity = Gravity.CENTER
+    setPadding(0, dpix(R.dimen.ds_space_8), 0, 0)
     visibility = View.GONE
   }
   card.addView(statusHint)
@@ -231,6 +242,7 @@ internal fun buildGuideChrome(activity: ComponentActivity, callbacks: GuideCallb
     setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
     setTextColor(color(R.color.ds_danger))
     typeface = typeMedium()
+    gravity = Gravity.CENTER
     maxLines = 3
     ellipsize = TextUtils.TruncateAt.END
     visibility = View.GONE
@@ -256,16 +268,27 @@ internal fun buildGuideChrome(activity: ComponentActivity, callbacks: GuideCallb
     val lp = LinearLayout.LayoutParams(
       ViewGroup.LayoutParams.MATCH_PARENT, dpix(R.dimen.ds_progress_height),
     )
-    lp.topMargin = dpix(R.dimen.ds_space_20)
+    lp.topMargin = dpix(R.dimen.ds_guide_progress_top_gap)
     layoutParams = lp
   }
   card.addView(progressBar)
 
+  // 进度条下**只有一行**文本：确定态是「42% · 预计还需 3 分钟」，不确定态是阶段句。
+  // 一行居中、等宽数字（tnum），百分比与剩余时间不会因读数跳动而左右晃。
   val progressText = TextView(activity).apply {
     setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-    setTextColor(color(R.color.ds_text_secondary))
-    setPadding(0, dpix(R.dimen.ds_space_8), 0, 0)
+    setTextColor(color(R.color.ds_text_primary))
+    typeface = typeMedium()
+    fontFeatureSettings = "tnum"
+    gravity = Gravity.CENTER
+    maxLines = 1
+    ellipsize = TextUtils.TruncateAt.END
     visibility = View.GONE
+    val lp = LinearLayout.LayoutParams(
+      ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+    )
+    lp.topMargin = dpix(R.dimen.ds_space_12)
+    layoutParams = lp
   }
   card.addView(progressText)
 
@@ -545,10 +568,12 @@ internal fun buildGuideChrome(activity: ComponentActivity, callbacks: GuideCallb
   }
   val actionBlock = LinearLayout(activity).apply {
     orientation = LinearLayout.VERTICAL
-    setPadding(0, dpix(R.dimen.ds_space_12), 0, 0)
+    // 与内容列同一水平安全边距，底部按钮不会比状态文案更贴屏幕边。
+    setPadding(dpix(R.dimen.ds_space_32), dpix(R.dimen.ds_space_12), dpix(R.dimen.ds_space_32), 0)
     val primaryRow = LinearLayout(activity).apply {
       orientation = LinearLayout.HORIZONTAL
-      gravity = Gravity.END or Gravity.BOTTOM
+      // 收紧档下按钮与齿轮作为一个整体居中；空闲档主按钮带 weight 撑满，gravity 不影响。
+      gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
     }
     primaryRow.addView(primaryButton, LinearLayout.LayoutParams(0, dpix(R.dimen.ds_btn_height), 1f))
     primaryRow.addView(gear, LinearLayout.LayoutParams(dpix(R.dimen.ds_btn_height), dpix(R.dimen.ds_btn_height)).apply {
@@ -619,6 +644,49 @@ internal fun buildGuideChrome(activity: ComponentActivity, callbacks: GuideCallb
     managementHost = managementHost,
     gear = gear,
   )
+}
+
+/**
+ * 主按钮的两档观感（进行中 / 空闲或失败）。
+ *
+ * 为什么在运行时改 LayoutParams 而不是备两枚按钮：主按钮只有一枚才有无障碍与点击语义上的
+ * 「唯一主操作」。两枚互切会让读屏器读到两个入口，也会让焦点在相位切换时丢在原地。
+ * 「进行中」不是要用户点的动作，形态必须让位：48dp 高、收窄、描边浅底；空闲/失败时恢复
+ * 强调色实心并撑满，用户要能一眼看到「启动」。
+ */
+internal fun applyGuidePrimaryStyle(activity: ComponentActivity, button: Button, compact: Boolean) {
+  val res = activity.resources
+  val hairline = res.displayMetrics.density.toInt().coerceAtLeast(1)
+  (button.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
+    if (compact) {
+      lp.width = res.getDimensionPixelSize(R.dimen.ds_guide_primary_compact_width)
+      lp.height = res.getDimensionPixelSize(R.dimen.ds_btn_secondary_height)
+      lp.weight = 0f
+    } else {
+      lp.width = 0
+      lp.height = res.getDimensionPixelSize(R.dimen.ds_btn_height)
+      lp.weight = 1f
+    }
+    button.layoutParams = lp
+  }
+  if (compact) {
+    button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+    button.setTextColor(activity.getColor(R.color.ds_text_primary))
+    button.background = DsUi.ripple(
+      DsUi.roundRect(
+        activity.getColor(R.color.ds_surface), res.getDimension(R.dimen.ds_radius_pill),
+        activity.getColor(R.color.ds_hairline), hairline,
+      ),
+      activity.getColor(R.color.ds_accent_soft),
+    )
+  } else {
+    button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+    button.setTextColor(activity.getColor(R.color.ds_text_on_accent))
+    button.background = DsUi.ripple(
+      DsUi.roundRect(activity.getColor(R.color.ds_accent), res.getDimension(R.dimen.ds_radius_pill)),
+      activity.getColor(R.color.ds_accent_pressed),
+    )
+  }
 }
 
 private fun chipView(activity: ComponentActivity, type: android.graphics.Typeface): TextView {

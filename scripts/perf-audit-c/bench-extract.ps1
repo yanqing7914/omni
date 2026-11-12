@@ -20,10 +20,7 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $work = (Get-Location).Path
 if ([string]::IsNullOrEmpty($Archive)) {
   $Archive = Join-Path (Split-Path -Parent (Split-Path -Parent $here)) 'app\src\main\assets\snapshot.tar.xz'
-  if (-not (Test-Path $Archive)) {
-    # 工作区里 assets/snapshot.tar.xz 被 gitignore：回落到主工作区的真实产物（只读）。
-    $Archive = 'D:\coding\dsh-mobile\omni\app\src\main\assets\snapshot.tar.xz'
-  }
+  if (-not (Test-Path $Archive)) { throw "找不到 $Archive（snapshot.tar.xz 被 gitignore，先构建或用 -Archive 指定）" }
 }
 if (-not (Test-Path $Archive)) { throw "archive not found: $Archive" }
 

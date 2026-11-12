@@ -45,7 +45,7 @@ object ControlProtocolV2 {
    * plugins/dsh-android-vdisplay/src/status.ts 与 scripts/control-ops-pending.json）。 */
   val SUPPORTED_OPS = listOf(
     "snapshot", "click", "longClick", "setText", "scroll", "global",
-    "screenshot", "state", "nodeText", "webSnapshot", "webAction",
+    "screenshot", "state", "nodeText", "webSnapshot", "webAction", "appLaunch",
     // 侧栏浏览器宿主半（browser*）
     "browserCaps", "browserShow", "browserHide", "browserClose", "browserOpen", "browserJs",
     "browserInput", "browserShot", "browserState", "browserSetUa", "browserViewport",

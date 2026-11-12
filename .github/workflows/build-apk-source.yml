@@ -21,6 +21,10 @@ jobs:
     timeout-minutes: 60
     env:
       DSH_APK_DIR: ${{ github.workspace }}
+      # 正式发布密钥（GitHub Secrets）；restore-release-key.sh 还原后导出 OMNI_RELEASE_KEYSTORE 路径。
+      OMNI_RELEASE_KEYSTORE_BASE64: ${{ secrets.OMNI_RELEASE_KEYSTORE_BASE64 }}
+      OMNI_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.OMNI_RELEASE_KEYSTORE_PASSWORD }}
+      OMNI_RELEASE_KEY_ALIAS: ${{ secrets.OMNI_RELEASE_KEY_ALIAS }}
     steps:
       - name: Checkout project source without Git LFS runtime archives
         uses: actions/checkout@v4
@@ -40,6 +44,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Restore the Omni release signing key
+        shell: bash
+        run: bash scripts/ci/restore-release-key.sh
       - name: Verify pinned source replacement before the expensive build
         run: |
           python3 -m unittest discover -s scripts/source-build -p 'test_*.py' -v
@@ -109,14 +116,14 @@ jobs:
           PY
           self_test_apk=.deploy-tmp/source-build/signing-self-test/probe.apk
           "$apksigner_bin" sign --min-sdk-version 26 \
-            --ks keystore/debug.keystore --ks-pass pass:android \
-            --ks-key-alias androiddebugkey --out "$self_test_apk" \
+            --ks "$OMNI_RELEASE_KEYSTORE" --ks-type PKCS12 --ks-pass env:OMNI_RELEASE_KEYSTORE_PASSWORD \
+            --ks-key-alias "$OMNI_RELEASE_KEY_ALIAS" --out "$self_test_apk" \
             .deploy-tmp/source-build/signing-self-test/probe.zip
           # 探针包的 manifest 是纯文本，apksigner 无法自行判定 minSdk，必须显式给（真实 APK 不需要）。
           probe_output=$("$apksigner_bin" verify --print-certs --verbose --min-sdk-version 26 "$self_test_apk" 2>&1 || true)
           probe_normalized=$(printf '%s' "$probe_output" | tr 'A-F' 'a-f' | tr -d ':')
           if ! printf '%s' "$probe_normalized" | grep -q "$expected_signing_certificate"; then
-            echo "::error::签名自证失败：用仓库 keystore 签出的探针包读不到期望指纹 $expected_signing_certificate"
+            echo "::error::签名自证失败：用正式发布密钥签出的探针包读不到期望指纹 $expected_signing_certificate"
             echo "--- apksigner sign/verify 原始输出开始 ---"
             printf '%s\n' "$probe_output"
             echo "--- apksigner 原始输出结束 ---"
@@ -141,10 +148,10 @@ jobs:
           git -C .deploy-tmp/deepseek-harness fetch --depth=1 origin "refs/tags/dsh-v$TAG:refs/tags/dsh-v$TAG"
           # A previous interrupted build may have modified tracked inputs before this checkout.
           # Reset only this dedicated source checkout; preserve ignored dependency caches.
+          # 用 checkout -f 丢弃改动：刚 --no-checkout 克隆时索引为空，`checkout -- .` 会报 pathspec 不匹配。
           test "$(realpath .deploy-tmp/deepseek-harness)" = "$(realpath .)/.deploy-tmp/deepseek-harness"
-          git -C .deploy-tmp/deepseek-harness checkout -- .
+          git -C .deploy-tmp/deepseek-harness checkout -f --detach "$COMMIT"
           git -C .deploy-tmp/deepseek-harness clean -fdq
-          git -C .deploy-tmp/deepseek-harness checkout --detach "$COMMIT"
           test "$(git -C .deploy-tmp/deepseek-harness rev-parse HEAD)" = "$COMMIT"
           test "$(git -C .deploy-tmp/deepseek-harness describe --tags --always)" = "dsh-v$TAG"
           node -e 'const c=require("./scripts/contract.json"); if(c.upstreamRepo!==".deploy-tmp/deepseek-harness" || !c.baseline || !c.upstream.commit) throw Error("source workflow identity does not match contract")'
@@ -697,18 +704,13 @@ jobs:
             .deploy-tmp/source-build/post-snapshot-native-runtime-check.json
           node scripts/source-build/check-dsh-source-snapshot.mjs "$snapshot_archive"
 
-      - name: Verify the repository debug signing keystore
+      - name: Verify the release signing keystore is present
         shell: bash
         run: |
           set -euo pipefail
-          # 固定签名（坑 202）：本链曾现场生成一次性证书，等于重新引入 e65818a 修掉的缺陷
-          # ——每次构建新密钥，产物既装不上已有安装，两次构建的包也互相覆盖不了。
-          # 项目规范（gotchas 坑 10 / DEPENDENCIES.md / design.md）是
-          # 「CI 与本地同一把 keystore/debug.keystore」，来源链同样走这一把：
-          # 产物可 install -r -t 覆盖、签名可复现，与正式产物的区别只在 -source 版本后缀与 artifact 名。
-          # 这里只查「在场」；证书指纹的判据放在产出侧（用 apksigner，输出不随语言/JDK 版本变），
-          # 因为 keytool -list -v 的文本既会本地化、新版 JDK 上还可能直接抛异常。
-          test -f keystore/debug.keystore
+          # 固定签名（坑 202）：不现场生成一次性证书。正式密钥已在作业开头从 secrets 还原并核对指纹，
+          # 这里只确认它仍在场；证书指纹的判据放在产出侧（apksigner）。
+          test -f "$OMNI_RELEASE_KEYSTORE"
 
       - name: 单元测试门禁前置（:app:testDebugUnitTest 全量）
         shell: bash
@@ -827,7 +829,7 @@ jobs:
           for apk in "${apks[@]}"; do args+=(--apk "$apk"); done
           # keystore 凭据必须显式声明（issue #1031）：门禁不再回落到 androiddebugkey/android。
           node scripts/check-apk-signatures.mjs "${args[@]}" --apksigner "$(cat .deploy-tmp/source-build/apksigner-path.txt)" \
-            --keystore keystore/debug.keystore --keystore-alias androiddebugkey --keystore-pass android
+            --keystore "$OMNI_RELEASE_KEYSTORE" --keystore-alias "$OMNI_RELEASE_KEY_ALIAS" --keystore-pass "$OMNI_RELEASE_KEYSTORE_PASSWORD"
           # provenance 记录的是**锚**（已发布产物的签名身份），不是 keystore 现算值：
           # keystore 只是交叉核对面，两者不一致时这条断言先判红，绝不能把 keystore 的指纹
           # 当作发布身份写进 provenance（issue #1031）。
@@ -839,7 +841,7 @@ jobs:
             for (const problem of anchor.problems) console.error(problem)
             process.exit(1)
           }
-          const cross = crossCheckKeystore({ anchorDigest: anchor.digest, keystoreDigest: readKeystoreCertificate('keystore/debug.keystore', { alias: 'androiddebugkey', pass: 'android' }) })
+          const cross = crossCheckKeystore({ anchorDigest: anchor.digest, keystoreDigest: readKeystoreCertificate(process.env.OMNI_RELEASE_KEYSTORE, { alias: process.env.OMNI_RELEASE_KEY_ALIAS, pass: process.env.OMNI_RELEASE_KEYSTORE_PASSWORD }) })
           if (!cross.ok) { console.error(cross.detail); process.exit(1) }
           writeFileSync('.deploy-tmp/source-build/signing-certificate-sha256.txt', anchor.digest + '\n')
           NODE

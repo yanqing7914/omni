@@ -1,0 +1,595 @@
+{
+  "schemaVersion": 1,
+  "categories": [
+    {
+      "id": "documents",
+      "title": {
+        "en": "Documents",
+        "zh": "文档处理"
+      }
+    },
+    {
+      "id": "media",
+      "title": {
+        "en": "Images",
+        "zh": "图像"
+      }
+    },
+    {
+      "id": "productivity",
+      "title": {
+        "en": "Productivity",
+        "zh": "效率工具"
+      }
+    },
+    {
+      "id": "shopping",
+      "title": {
+        "en": "Shopping",
+        "zh": "购物"
+      }
+    },
+    {
+      "id": "writing",
+      "title": {
+        "en": "Writing",
+        "zh": "写作"
+      }
+    }
+  ],
+  "skills": [
+    {
+      "id": "define-goal",
+      "name": "define-goal",
+      "title": {
+        "en": "Define a Goal",
+        "zh": "定义目标"
+      },
+      "description": {
+        "en": "Turn a fuzzy intention into a concrete, measurable goal with explicit success criteria before starting work.",
+        "zh": "在开始工作前把模糊意图变成具体、可度量且有明确成功标准的目标。"
+      },
+      "category": "productivity",
+      "license": "Apache-2.0",
+      "source": {
+        "owner": "openai",
+        "repo": "skills",
+        "ref": "49f948faa9258a0c61caceaf225e179651397431",
+        "path": "skills/.curated/define-goal"
+      },
+      "files": [
+        {
+          "path": "LICENSE.txt",
+          "sha256": "4dd13869245e356246a5b770723247bbb80a8f07a181d1d3d873a1734297cdb9",
+          "size": 10776
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "708df89ff19cbae82a762efae036735d1914b5c7e44df1832e0b723f6cd9ee30",
+          "size": 5647
+        },
+        {
+          "path": "agents/openai.yaml",
+          "sha256": "9d870a5d594130261173d7a4bd3fd9221a71eff34c347a7c782da5046fd23cb9",
+          "size": 208
+        }
+      ]
+    },
+    {
+      "id": "docx",
+      "name": "docx",
+      "title": {
+        "en": "Word Documents",
+        "zh": "Word 文档"
+      },
+      "description": {
+        "en": "Create, read, edit and validate .docx and .dotx files, including tracked changes, comments, tables and document conversion.",
+        "zh": "创建、读取、编辑与校验 .docx/.dotx 文件，支持修订、批注、表格与文档转换。"
+      },
+      "category": "documents",
+      "license": "Apache-2.0",
+      "source": {
+        "owner": "anthropics",
+        "repo": "skills",
+        "ref": "2c5958ecac7cee2b583967a2c4981d0f4a75c579",
+        "path": "skills/docx"
+      },
+      "files": [
+        {
+          "path": "LICENSE.txt",
+          "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+          "size": 11357
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "9e8202e2524a9ed87da67a5b3eaa76e8e6038f4171f8251ad6aaefd34e82a3df",
+          "size": 6897
+        },
+        {
+          "path": "scripts/__init__.py",
+          "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+          "size": 1
+        },
+        {
+          "path": "scripts/accept_changes.py",
+          "sha256": "0c991d2bc7304a1248e9f3bf9b1498f0b6e76641fc457e7cbd73c99b4eef3a74",
+          "size": 4051
+        },
+        {
+          "path": "scripts/comment.py",
+          "sha256": "37d116e5f56bb142b208c6c6a4bbcf960495abf470ddb7c6675ccfac864ba3d7",
+          "size": 14054
+        },
+        {
+          "path": "scripts/merge_runs.py",
+          "sha256": "3ab367fd7fba4647943d0aa5e65203b15458551410f5ffc821d902616a4b9f40",
+          "size": 9398
+        },
+        {
+          "path": "scripts/office/helpers/__init__.py",
+          "sha256": "678e42456d9e10923c8b9a93691cdd993de3433448a184fa72a0c31f4ae086d5",
+          "size": 3358
+        },
+        {
+          "path": "scripts/office/helpers/pptx_chart.py",
+          "sha256": "47ac266f7d39d11ede6bb0d1f3a19d801394fd2964636f1b48beb701f1832964",
+          "size": 5862
+        },
+        {
+          "path": "scripts/office/helpers/pptx_slide.py",
+          "sha256": "7b9f69b4a5bd6a2d9eabf9e0e3e796d7a421373145f6a8cd11f60b7ba2d6a5d0",
+          "size": 1675
+        },
+        {
+          "path": "scripts/office/helpers/pptx_theme.py",
+          "sha256": "ebb54c56e9c13807f5f98f0cae22d47cdd0162da8525eaa664e3f2c8c8d6bb03",
+          "size": 3510
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/dml-chart.xsd",
+          "sha256": "41b93bd8857cc68b1e43be2806a872d736a9bdd6566900062d8fdb57d7bbb354",
+          "size": 74984
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/dml-chartDrawing.xsd",
+          "sha256": "3fd0586f2637b98bb9886f0e0b67d89e1cc987c2d158cc7deb5f5b9890ced412",
+          "size": 6956
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/dml-diagram.xsd",
+          "sha256": "29b254ee0d10414a8504b5a08149c7baec35a60d5ff607d6b3f492aa36815f40",
+          "size": 51302
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/dml-lockedCanvas.xsd",
+          "sha256": "5cb76dabd8b97d1e9308a1700b90c20139be4d50792d21a7f09789f5cccd6026",
+          "size": 624
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/dml-main.xsd",
+          "sha256": "5375417f0f5394b8dd1a7035b9679151f19a6b65df309dec10cfb4a420cb00e9",
+          "size": 152039
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/dml-picture.xsd",
+          "sha256": "5d389d42befbebd91945d620242347caecd3367f9a3a7cf8d97949507ae1f53c",
+          "size": 1231
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/dml-spreadsheetDrawing.xsd",
+          "sha256": "b4532b6d258832953fbb3ee4c711f4fe25d3faf46a10644b2505f17010d01e88",
+          "size": 8862
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/dml-wordprocessingDrawing.xsd",
+          "sha256": "bdad416b096b61d37b71603b2c949484f9070c830bdaeba93bf35e15c8900614",
+          "size": 14795
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/pml.xsd",
+          "sha256": "d173c3e5d61e42e2e3a97226c632fd2ab7cc481fc4e492365b87024ab546daff",
+          "size": 83612
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/shared-additionalCharacteristics.xsd",
+          "sha256": "3c6709101c6aaa82888df5d8795c33f9e857196790eb320d9194e64be2b6bdd8",
+          "size": 1269
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/shared-bibliography.xsd",
+          "sha256": "0b364451dc36a48dd6dae0f3b6ada05fd9b71e5208211f8ee5537d7e51a587e2",
+          "size": 7328
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/shared-commonSimpleTypes.xsd",
+          "sha256": "e2abacbb9a55ce1365f8961bc1b1395bbc811e512b111000d8c333f98458dece",
+          "size": 6382
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/shared-customXmlDataProperties.xsd",
+          "sha256": "0ef4bb354ff44b923564c4ddbdda5987919d220225129ec94614a618ceafc281",
+          "size": 1248
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/shared-customXmlSchemaProperties.xsd",
+          "sha256": "0d103b99a4a8652f8871552a69d42d2a3760ac6a5e3ef02d979c4273257ff6a4",
+          "size": 880
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/shared-documentPropertiesCustom.xsd",
+          "sha256": "9c085407751b9061c1f996f6c39ce58451be22a8d334f09175f0e89e42736285",
+          "size": 2608
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/shared-documentPropertiesExtended.xsd",
+          "sha256": "bc92e36ccd233722d4c5869bec71ddc7b12e2df56059942cce5a39065cc9c368",
+          "size": 3507
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/shared-documentPropertiesVariantTypes.xsd",
+          "sha256": "7b5b7413e2c895b1e148e82e292a117d53c7ec65b0696c992edca57b61b4a74b",
+          "size": 7507
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/shared-math.xsd",
+          "sha256": "3213ef1631606250f5010b42cad7ef716f7c59426367798e33c374c0ec391d3a",
+          "size": 23313
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/shared-relationshipReference.xsd",
+          "sha256": "12264f3c03d738311cd9237d212f1c07479e70f0cbe1ae725d29b36539aef637",
+          "size": 1367
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/sml.xsd",
+          "sha256": "beffeed56945c22a77440122c8bdc426f3fcbe7f3b12ea0976c770d1f8d54578",
+          "size": 242277
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/vml-main.xsd",
+          "sha256": "f5ee623b08b6a66935e5aced2f5d8ad0fc71bf9e8e833cd490150c0fa94b8763",
+          "size": 26148
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/vml-officeDrawing.xsd",
+          "sha256": "585bedc1313b40888dcc544cb74cd939a105ee674f3b1d3aa1cc6d34f70ff155",
+          "size": 25279
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/vml-presentationDrawing.xsd",
+          "sha256": "133c9f64a5c5d573b78d0a474122b22506d8eadb5e063f67cdbbb8fa2f161d0e",
+          "size": 535
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/vml-spreadsheetDrawing.xsd",
+          "sha256": "6bdeb169c3717eb01108853bd9fc5a3750fb1fa5b82abbdd854d49855a40f519",
+          "size": 5712
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/vml-wordprocessingDrawing.xsd",
+          "sha256": "475dcae1e7d1ea46232db6f8481040c15e53a52a3c256831d3df204212b0e831",
+          "size": 4010
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/wml.xsd",
+          "sha256": "c2dd9f61f892deae6acd8d20771ea79b12018af25f3bf8d06639c8542d218cfd",
+          "size": 171367
+        },
+        {
+          "path": "scripts/office/schemas/ISO-IEC29500-4_2016/xml.xsd",
+          "sha256": "a539aa2fb154fa50e0f5cc97e6ad7cbc66f8ec3e3746f61ec6a8b0d5d15ecdf2",
+          "size": 4646
+        },
+        {
+          "path": "scripts/office/schemas/ecma/fouth-edition/opc-contentTypes.xsd",
+          "sha256": "9e0b7209fc69ab11987900404540969976000c5ebe4d4f58c43dc3842886bf3a",
+          "size": 1963
+        },
+        {
+          "path": "scripts/office/schemas/ecma/fouth-edition/opc-coreProperties.xsd",
+          "sha256": "451958454e8588dfc7cd945981ada142ca06ff3307937f5700df059c2b307fa8",
+          "size": 2515
+        },
+        {
+          "path": "scripts/office/schemas/ecma/fouth-edition/opc-digSig.xsd",
+          "sha256": "6de111e11403f7cd49027400755bae0ea1cabef2815f09bd40a24f0017613b24",
+          "size": 2856
+        },
+        {
+          "path": "scripts/office/schemas/ecma/fouth-edition/opc-relationships.xsd",
+          "sha256": "f565adfef5a502044abc3a9153e157edc25af78304d335994afb958874b15e26",
+          "size": 1344
+        },
+        {
+          "path": "scripts/office/schemas/mce/mc.xsd",
+          "sha256": "3a37e461ecf5a8670fdec34029703401f8728ab9c96ec1739a6ae58d55212413",
+          "size": 3127
+        },
+        {
+          "path": "scripts/office/schemas/microsoft/wml-2010.xsd",
+          "sha256": "568b26ee156cb9549aa439ca2158965f77b7c1602b7e0316f40ac6cf586e35f2",
+          "size": 26549
+        },
+        {
+          "path": "scripts/office/schemas/microsoft/wml-2012.xsd",
+          "sha256": "0fa75578a000439a7988ba0c59fdc69f774bbd416cbacc14d07125b3f686cb74",
+          "size": 3745
+        },
+        {
+          "path": "scripts/office/schemas/microsoft/wml-2018.xsd",
+          "sha256": "be0ff793a22dd31384650c3a4da14c2fa8062751c2e97b0e5ee852bda13c60ad",
+          "size": 901
+        },
+        {
+          "path": "scripts/office/schemas/microsoft/wml-cex-2018.xsd",
+          "sha256": "fddc2b880cabb9005aebbc7e783e53c19fec1c03df7d0e2f2076a33a0fdfd081",
+          "size": 1778
+        },
+        {
+          "path": "scripts/office/schemas/microsoft/wml-cid-2016.xsd",
+          "sha256": "127ca209fa73d7cb708449cb355c871867948a96e4a74f7bf5811ef62d17991d",
+          "size": 1002
+        },
+        {
+          "path": "scripts/office/schemas/microsoft/wml-sdtdatahash-2020.xsd",
+          "sha256": "842e7163409c8d74f4d7088a8bc99500d80bc75332681a0980055b08f374a604",
+          "size": 600
+        },
+        {
+          "path": "scripts/office/schemas/microsoft/wml-symex-2015.xsd",
+          "sha256": "16f6f8072249f431370723c2cd8974672e0d9c897e00e97dd918079df934871b",
+          "size": 745
+        },
+        {
+          "path": "scripts/office/soffice.py",
+          "sha256": "df2c8d7249c132a4512d744482e4b5ed0ecbe885f0bcfb1295e7e6a7ced0432c",
+          "size": 5927
+        },
+        {
+          "path": "scripts/office/validate.py",
+          "sha256": "346a4c89d92fff55e610f11efda48c30228815b29bdb10b987e48f7af70acf1e",
+          "size": 6142
+        },
+        {
+          "path": "scripts/office/validators/__init__.py",
+          "sha256": "83e0f035c5abea238d3f2c3968afbd511ed022b527b7c9cb60a9434cc34ff987",
+          "size": 336
+        },
+        {
+          "path": "scripts/office/validators/base.py",
+          "sha256": "f818ea28c793ba42960fa4498265e2632a62c86f7b5d6aff6fa89dacc02d59ea",
+          "size": 33756
+        },
+        {
+          "path": "scripts/office/validators/docx.py",
+          "sha256": "93d3444c0ef3f043d21a2285c46d2cda478426b930dc33dcf3b11265935517b5",
+          "size": 17482
+        },
+        {
+          "path": "scripts/office/validators/pptx.py",
+          "sha256": "17eadad2b7a8374ccbe4cda45693bcd6a36f9d61a7d60f9c9ceef9464dec8299",
+          "size": 15966
+        },
+        {
+          "path": "scripts/office/validators/redlining.py",
+          "sha256": "ed50d0885eee4b9c387f546b059bcaed64086815880a5167336244f93e305123",
+          "size": 11231
+        },
+        {
+          "path": "scripts/templates/comments.xml",
+          "sha256": "a08ba83ee8790ac9e3dc61921f4988f19edd7e06ac09d6f1897a877c1581818d",
+          "size": 2603
+        },
+        {
+          "path": "scripts/templates/commentsExtended.xml",
+          "sha256": "544eeecfeceed4b468fff163cd9c366d33641c8b8ab691ce002576197846afe8",
+          "size": 2611
+        },
+        {
+          "path": "scripts/templates/commentsExtensible.xml",
+          "sha256": "bad10b3283e6ad6e7ef6d1ca5169683721ed690ee331282c65df04017e080631",
+          "size": 2707
+        },
+        {
+          "path": "scripts/templates/commentsIds.xml",
+          "sha256": "db20f9616e004ec42ef736e80c2384e45db0f8d1194d31dc8b37c7d6ecdd6420",
+          "size": 2619
+        },
+        {
+          "path": "scripts/templates/people.xml",
+          "sha256": "056f63aa1197fd8c9dda980c9f1b9ff016fd5fa4a462df8aec5f384f39d23e37",
+          "size": 115
+        }
+      ]
+    },
+    {
+      "id": "git-commit-message",
+      "name": "git-commit-message",
+      "title": {
+        "en": "Git Commit Message",
+        "zh": "Git 提交说明"
+      },
+      "description": {
+        "en": "Write and review commit messages from the staged diff, with an imperative subject, a why-focused body and issue references.",
+        "zh": "根据暂存区差异撰写和审阅提交说明：祈使句主题、解释原因的主体与 issue 引用。"
+      },
+      "category": "writing",
+      "license": "MIT",
+      "source": {
+        "owner": "yanqing7914",
+        "repo": "omni",
+        "ref": "main",
+        "path": "market/skills/git-commit-message"
+      },
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "993f6b78cf16e70ddb0fa72f50895405182e4bda445316cc96cbe57dc2598dc0",
+          "size": 1993
+        }
+      ]
+    },
+    {
+      "id": "image-cleanup-checklist",
+      "name": "image-cleanup-checklist",
+      "title": {
+        "en": "Image Cleanup Checklist",
+        "zh": "图片整理清单"
+      },
+      "description": {
+        "en": "Review a photo or product image and produce a concrete must-fix / should-fix list before it is published.",
+        "zh": "检查照片或商品图，给出必须改/建议改的具体清单，含裁剪、色偏、合规检查。"
+      },
+      "category": "media",
+      "license": "MIT",
+      "source": {
+        "owner": "yanqing7914",
+        "repo": "omni",
+        "ref": "main",
+        "path": "market/skills/image-cleanup-checklist"
+      },
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "3e2babc3759ab0d41a8282be9eaa0b9df8e75a65d0907acc6d84d0eab2ff75fc",
+          "size": 1577
+        }
+      ]
+    },
+    {
+      "id": "image-style-prompt",
+      "name": "image-style-prompt",
+      "title": {
+        "en": "Image Restyle Prompt",
+        "zh": "图片风格改写提示词"
+      },
+      "description": {
+        "en": "Turn a restyle request into a structured prompt for an image tool, with subject preservation and negative prompts.",
+        "zh": "把「换成某种风格」写成可直接粘贴的结构化提示词，含主体保持项与负面提示。"
+      },
+      "category": "media",
+      "license": "MIT",
+      "source": {
+        "owner": "yanqing7914",
+        "repo": "omni",
+        "ref": "main",
+        "path": "market/skills/image-style-prompt"
+      },
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "b417d9d4698e419140ea86b75a06c5b620de89342589074b09fd2ee6e5fe8534",
+          "size": 2031
+        }
+      ]
+    },
+    {
+      "id": "screenshot",
+      "name": "screenshot",
+      "title": {
+        "en": "System Screenshot",
+        "zh": "系统截图"
+      },
+      "description": {
+        "en": "Capture a desktop or window screenshot when the user asks for one or when tool-specific capture is unavailable.",
+        "zh": "在用户明确要求截图或专用截图能力不可用时，捕获桌面或窗口截图。"
+      },
+      "category": "productivity",
+      "license": "Apache-2.0",
+      "source": {
+        "owner": "openai",
+        "repo": "skills",
+        "ref": "49f948faa9258a0c61caceaf225e179651397431",
+        "path": "skills/.curated/screenshot"
+      },
+      "files": [
+        {
+          "path": "LICENSE.txt",
+          "sha256": "4dd13869245e356246a5b770723247bbb80a8f07a181d1d3d873a1734297cdb9",
+          "size": 10776
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "081935a6a163277537d46365f49d6b4a3cb40b4748347e7e88759c5927fa8cf5",
+          "size": 7754
+        },
+        {
+          "path": "agents/openai.yaml",
+          "sha256": "f29638eb930e27d44846474620b0d817b4b77fb5d09caf27db269463ae45cfa8",
+          "size": 273
+        },
+        {
+          "path": "assets/screenshot-small.svg",
+          "sha256": "b0ff24097dfcd889504fab312a0e20d1d79dde0745268647a8cc2471b4baf794",
+          "size": 1019
+        },
+        {
+          "path": "assets/screenshot.png",
+          "sha256": "4ff96a476f2a2ac4ca7b626f9d4b78a7aa8cce0219e0688c5f15355513b61b5b",
+          "size": 860
+        },
+        {
+          "path": "scripts/ensure_macos_permissions.sh",
+          "sha256": "9aa750f1e9592519d6c18b966fd65c1d4108c25bd3471ce625dfafd784856d7f",
+          "size": 1702
+        },
+        {
+          "path": "scripts/macos_display_info.swift",
+          "sha256": "0969cfef9c9890c82cae5ad75a6cd40fd56d33b28f27347642ef5e837f18b042",
+          "size": 482
+        },
+        {
+          "path": "scripts/macos_permissions.swift",
+          "sha256": "cf110651350e50d600268f0a1a892ac8d662505474b4455cdfde2ac5b5f4aca6",
+          "size": 929
+        },
+        {
+          "path": "scripts/macos_window_info.swift",
+          "sha256": "c7faff7913d6072284b7ef1e5d26c524ab861ad32afc0c066f24ba95ae3f3597",
+          "size": 3595
+        },
+        {
+          "path": "scripts/take_screenshot.ps1",
+          "sha256": "a31a2242e41fd1c5471651afbcced660f98fbc884f11e531218348f700a3f826",
+          "size": 4947
+        },
+        {
+          "path": "scripts/take_screenshot.py",
+          "sha256": "56eeabe2dac5d23915b9a0fb57a07431fad2d310c5444f60f71f09299899232b",
+          "size": 19659
+        }
+      ]
+    },
+    {
+      "id": "taobao-app-shopping",
+      "name": "taobao-app-shopping",
+      "title": {
+        "en": "Taobao App Shopping",
+        "zh": "淘宝 App 购物"
+      },
+      "description": {
+        "en": "Search, compare and inspect products inside the Taobao or Tmall Android app, and manage the cart. Never pays or submits an order without your confirmation.",
+        "zh": "在手机淘宝/天猫 App 里搜索、比价、看详情与管理购物车；下单和付款前一定先问你。"
+      },
+      "category": "shopping",
+      "license": "MIT",
+      "requires": [
+        "a11y",
+        "real-screen"
+      ],
+      "source": {
+        "owner": "yanqing7914",
+        "repo": "omni",
+        "ref": "main",
+        "path": "market/skills/taobao-app-shopping"
+      },
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "a341022fcffbb844ba26b8f7caa1e8143c375c12c42372504cbf357e7d5eb107",
+          "size": 4273
+        }
+      ]
+    }
+  ]
+}

@@ -276,7 +276,7 @@ t('D4：android_ui_detail 与 android_screen_list 已注册（源码级 defineTo
   assert.equal(defined.size, 14)
 })
 
-t('D5：策略答「ADB 不可用」→ 四个 ADB 专属工具动手前拒绝，且不碰设备', async () => {
+t('D5：策略答「ADB 不可用」→ 三个 ADB 专属工具动手前拒绝，且不碰设备', async () => {
   const { face, calls } = makeFace({
     controlDecision: (op, session, forceBackend) => (forceBackend === 'adb'
       ? { backend: 'deny', reason: '测试桩：ADB 未配对' }
@@ -285,7 +285,6 @@ t('D5：策略答「ADB 不可用」→ 四个 ADB 专属工具动手前拒绝�
   const { byName } = applyManage(face)
   const cases = [
     ['android_ui_tree', {}],
-    ['android_app_launch', { pkg: 'com.example' }],
     ['android_env_prepare', {}],
     ['android_act_input', { action: 'keyevent', keycode: 4 }],
   ]
@@ -301,6 +300,22 @@ t('D5：策略答「ADB 不可用」→ 四个 ADB 专属工具动手前拒绝�
   assert.equal(calls.adbLine.length, 0, '拒绝路径不得发起 adb 行调用')
   assert.equal(calls.control.length, 0, '拒绝路径不得碰无障碍队列')
   assert.ok(!/环境准备完成/.test(texts.android_env_prepare), 'env_prepare 拒绝路径不得出现「环境准备完成」')
+})
+
+t('D5b：android_app_launch 不再被 ADB 门挡住，走无障碍通道直接拉起', async () => {
+  // 2026-11-12 真机实测：Shizuku 未授权时淘宝技能死在第一步。启动已安装应用不需要 shell。
+  const { face, calls } = makeFace({
+    controlDecision: (op, session, forceBackend) => (forceBackend === 'adb'
+      ? { backend: 'deny', reason: '测试桩：ADB 未配对' }
+      : { backend: 'a11y', reason: 'test-a11y' }),
+  })
+  face.controlExec = async (op) => { calls.control.push({ op }); return { ok: true, data: { launched: 'com.example' } } }
+  const { byName } = applyManage(face)
+  const r = await byName('android_app_launch').execute({ pkg: 'com.example', waitMs: 500 }, EXEC)
+  assert.equal(r.ok, true, JSON.stringify(r).slice(0, 200))
+  assert.ok(calls.control.some((c) => c.op === 'appLaunch'), '必须经无障碍通道的 appLaunch op')
+  assert.equal(calls.adbShell.filter((c) => /monkey/.test(c)).length, 0, '不得回退 monkey')
+  assert.match(String(r.text), /无障碍通道/, '文案必须说明走的是哪条通道')
 })
 
 t('D5：旧 bridge（不认识 forceBackend）与策略面缺席都放行——不得误拒', async () => {

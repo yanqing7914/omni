@@ -779,9 +779,12 @@ internal class EngineStartFlow(private val activity: MainActivity) {
           }
         } else {
           if (!isCurrentEngineFlow(generation)) return@Thread
+          // 首次安装/覆盖安装后更新的判定必须在刷新**之前**（之后 live 树与指纹都在了）。
+          val installKind = activity.engineManager.currentRuntimeInstallKind()
           activity.runOnUiThread {
             if (!isCurrentEngineFlow(generation)) return@runOnUiThread
-            activity.applyGuidePhase(GuidePhase.Extracting, UiText.t(activity, "正在解压运行时", "Extracting the runtime"))
+            activity.guideRenderer.beginRuntimeExtract(installKind)
+            activity.applyGuidePhase(GuidePhase.Extracting, activity.guideRenderer.runtimeExtractPhaseTitle())
             activity.guideRenderer.showInitialRuntimeStage()
             activity.guideRenderer.progressText.visibility = View.VISIBLE
             activity.guideRenderer.progressText.text = UiText.t(activity, "正在准备运行时…", "Preparing the runtime…")
@@ -793,24 +796,23 @@ internal class EngineStartFlow(private val activity: MainActivity) {
           activity.guideRenderer.resetRuntimeStageRotation()
           requireCurrentEngineFlow(generation)
           val ok = activity.engineManager.refreshSnapshot(
-            onProgress = { _, _ ->
+            onProgress = { done, total ->
+              // 时间戳在回调线程取（单调时钟），不等排进 UI 线程之后：剩余时间按字节真实到达的时刻算速率。
+              val nowMs = SystemClock.elapsedRealtime()
               activity.runOnUiThread {
                 if (!isCurrentEngineFlow(generation)) return@runOnUiThread
-                // 0.14.2 P2：**不再印任何数字**。旧实现用编造的 700MB 当分母拼
-                // 「已写入 1157 MB / 约 700 MB（99%）」（分子大于分母还报 99%）——真因是分母凭空
-                // 造的，而真实解压是增量的（含磁盘上已有数据）。现在只推进阶段车轱辘话，
-                // 进度条恒为不确定态。回调里的 done/total 仍然收下（接口未变），但不再渲染。
+                // total 来自 xz index 的解压后总量（EngineManager.extractSnapshotTo），done 与它同口径；
+                // total=0（index 读不到）时渲染层退回不确定态 + 无数字阶段句（0.14.2 P2 的兜底仍在）。
                 if (activity.guideRenderer.lastGuidePhase != GuidePhase.Extracting) {
-                  activity.applyGuidePhase(GuidePhase.Extracting, UiText.t(activity, "正在解压运行时", "Extracting the runtime"))
+                  activity.applyGuidePhase(GuidePhase.Extracting, activity.guideRenderer.runtimeExtractPhaseTitle())
                 }
-                // 时间戳取自单调时钟：回调频率再高，闸门也只按 1.3s 的窗放行（同一窗内只刷可见性）。
-                activity.guideRenderer.showRuntimeStage(SystemClock.elapsedRealtime())
+                activity.guideRenderer.showExtractProgress(nowMs, done, total)
               }
             },
             onStage = { stage ->
               activity.runOnUiThread {
                 if (!isCurrentEngineFlow(generation)) return@runOnUiThread
-                activity.applyGuidePhase(GuidePhase.Extracting, UiText.t(activity, "正在更新运行时", "Updating the runtime"))
+                activity.applyGuidePhase(GuidePhase.Extracting, activity.guideRenderer.runtimeExtractPhaseTitle())
                 // stage 是 EngineManager 的阶段句（「正在解压运行时…」「正在恢复用户数据…」等），
                 // 本身就是无数字的车轱辘话，直接沿用——不为它另造一套文案，避免两份口径漂移。
                 activity.guideRenderer.progressText.visibility = View.VISIBLE
@@ -818,6 +820,9 @@ internal class EngineStartFlow(private val activity: MainActivity) {
               }
             },
           )
+          if (ok) activity.runOnUiThread {
+            if (isCurrentEngineFlow(generation)) activity.guideRenderer.finishExtractProgress()
+          }
           requireCurrentEngineFlow(generation)
           if (!ok && activity.engineManager.lastRefreshDeferred) {
             // 0.14.9：另一条启动流正在刷新同一个快照——**让行不是失败**。

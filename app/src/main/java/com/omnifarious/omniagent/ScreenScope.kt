@@ -27,6 +27,17 @@ enum class ScreenScope(val wire: String) {
 
   companion object {
     fun fromWire(value: String?): ScreenScope = entries.firstOrNull { it.wire == value } ?: VIRTUAL_ONLY
+
+    /**
+     * 已落盘值的解析口径（2026-11-11 用户定）：
+     *
+     * **从未设置过**（prefs 里没有这个键）→ ALL。设备控制的主要用途就是在真实屏上操作第三方 App
+     * （淘宝等）；缺省 virtual-only 会让这类技能在装好后必然失败，且设置入口已冻结，用户无处可改。
+     * 会话档位（danger-full-access）与无障碍开关仍是前置门，范围这里不再是默认拦路虎。
+     *
+     * **有值但损坏/不认识** → 仍 fail-closed 到 virtual-only：那是数据异常，不是用户的默认选择。
+     */
+    fun fromStored(value: String?): ScreenScope = if (value == null) ALL else fromWire(value)
   }
 }
 
@@ -53,8 +64,8 @@ object ScreenScopePrefs {
   private const val PREFS = "dsh_screen_scope"
   private const val KEY_SCOPE = "scope"
 
-  /** @return current normalized scope; absent/corrupt data fails closed to virtual-only. */
-  fun current(context: Context): ScreenScope = ScreenScope.fromWire(
+  /** @return current normalized scope; never-set defaults to ALL, corrupt data fails closed. */
+  fun current(context: Context): ScreenScope = ScreenScope.fromStored(
     context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_SCOPE, null),
   )
 

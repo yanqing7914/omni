@@ -52,14 +52,30 @@ import { SessionLogDialogObserver } from './session-log-dialog-observer.ts'
 import { openSessionForNotify, type SessionOpenFace } from './mobile/notify-landing.ts'
 import { DevSection } from './dev-section/DevSection.tsx'
 import { PhoneControlSection } from './dev-section/phone-control.tsx'
+
+/**
+ * 「手机控制」设置分区冻结开关（2026-11-09 用户定）：为 true 时不注册该分区，设置页看不到入口。
+ * 只藏入口：PhoneControlSection 与 android_capabilities 解锁的手机工具都不动，改回 false 即恢复。
+ */
+export const PHONE_CONTROL_FROZEN = true
+
+/**
+ * 「应用更新」设置分区冻结开关（2026-11-10 用户定）：为 true 时不在设置页注册该分区，
+ * 更新入口改到界面右下角（有新版时才出现）。页面代码与壳侧状态机都保留，改回 false 即恢复。
+ */
+export const APK_UPDATE_SECTION_FROZEN = true
 import { NotifySettingsSection } from './dev-section/notify-settings.tsx'
 import { ApkUpdateSection } from './dev-section/apk-update.tsx'
+import { ExtensionsSection } from './dev-section/extensions.tsx'
+import { EXTENSIONS_CSS } from './dev-section/extensions.css.ts'
 import { DEV_SECTION_CSS } from './dev-section/dev-section.css.ts'
 import { MARKETPLACE_CSS } from './marketplace/marketplace.css.ts'
 import { registerMarketplaceAction } from './marketplace/marketplace-entry.tsx'
 import { installAboutEntry } from './mobile/about-entry.ts'
 import { ABOUT_ENTRY_CSS } from './mobile/about-entry.css.ts'
 import { AboutSection } from './mobile/about-section.tsx'
+import { installUpdateEntry } from './mobile/update-entry.ts'
+import { UPDATE_ENTRY_CSS } from './mobile/update-entry.css.ts'
 import { GeneralSettings } from './general-settings/GeneralSettings.tsx'
 import { GENERAL_SETTINGS_CSS } from './general-settings/general-settings.css.ts'
 import { tr } from './i18n.ts'
@@ -361,16 +377,31 @@ export function apply(ctx: ClientContext): void {
     children: { 'settings.dev.item': { kind: 'list', scope: 'root' } },
   }, DevSection))
 
+  // 扩展（技能 + 插件）：市场服务端已就绪，此前设置页没有页面侧入口。
+  // order 95 排在应用更新（96）之前：它是「给引擎加能力」的日常入口，比维护应用自身更常打开。
+  ctx.effect(() => injectStyle('extensions', EXTENSIONS_CSS), 'ui-responsive: extensions styles')
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'android-extensions',
+    order: 95,
+    label: () => tr('扩展', 'Extensions'),
+  }, ExtensionsSection))
+
   // 应用更新（用户拍板「更新块继续放设置页、从开发者选项提出来」）：应用怎么更新是每个用户都要用到的
   // 能力，此前唯一入口埋在开发者选项里（对普通用户不可达）——提级为设置页一级分区。
   // order 96：排在通知（97）/ 手机控制（98）/ 开发者选项（99）之前——它是「维护本应用自身」的动作，
   // 与那三项「配置应用行为」的性质不同，放列表更靠上的位置用户才找得到。
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'android-apk-update',
-    order: 96,
-    label: () => tr('应用更新', 'App updates'),
-  }, ApkUpdateSection))
+  //
+  // 已冻结（APK_UPDATE_SECTION_FROZEN，2026-11-10 用户定）：设置里不再出现这一行，改由界面右下角的
+  // 更新入口承担（见 update-entry.ts）。页面代码与壳侧状态机都保留，改回 false 即恢复。
+  if (!APK_UPDATE_SECTION_FROZEN) {
+    ctx.slots.inject('settings.section', () => ctx.slots.register({
+      name: 'settings.section',
+      id: 'android-apk-update',
+      order: 96,
+      label: () => tr('应用更新', 'App updates'),
+    }, ApkUpdateSection))
+  }
 
   // 通知（0.14.1 批 3 / P3-5）：提醒方式与「关掉会怎样」是每个用户都要做的决定，
   // 此前唯一入口埋在开发者选项里（对普通用户不可达）——提级为设置页一级分区。
@@ -382,12 +413,15 @@ export function apply(ctx: ClientContext): void {
   }, NotifySettingsSection))
 
   // 手机控制（0.14.0 用户定例）：把屏幕/Shizuku/虚拟屏/浮窗/无障碍/强制销毁收进独立设置页。
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'android-phone-control',
-    order: 98,
-    label: () => tr('手机控制', 'Phone control'),
-  }, PhoneControlSection))
+  // 已冻结（PHONE_CONTROL_FROZEN）：设置页不出现这一行，页面代码与 AI 侧手机工具都保留。
+  if (!PHONE_CONTROL_FROZEN) {
+    ctx.slots.inject('settings.section', () => ctx.slots.register({
+      name: 'settings.section',
+      id: 'android-phone-control',
+      order: 98,
+      label: () => tr('手机控制', 'Phone control'),
+    }, PhoneControlSection))
+  }
 
   // Linux 环境（实验性内部插件）**不由本文件注册**：该分区的唯一注册方是 vendored 的
   // dsh-linux-bootstrap 客户端插件（plugins/dsh-linux-bootstrap 的 client 条目，id 同为
@@ -415,6 +449,11 @@ export function apply(ctx: ClientContext): void {
   // 「设置 → 通用」底部那行版本改成「关于」入口，点开看壳与引擎两个版本。
   ctx.effect(() => injectStyle('about-entry', ABOUT_ENTRY_CSS), 'ui-responsive: about entry styles')
   ctx.effect(() => installAboutEntry(), 'ui-responsive: about entry')
+
+  // 应用更新入口（2026-11-10 用户定例）：设置里的分区已冻结，改为界面右下角在有新版时出现胶囊，
+  // 并在抽屉「更多」行右侧常驻一枚圆形按钮。桥缺席（桌面宿主）时两个入口都不渲染。
+  ctx.effect(() => injectStyle('update-entry', UPDATE_ENTRY_CSS), 'ui-responsive: update entry styles')
+  ctx.effect(() => installUpdateEntry(), 'ui-responsive: update entry')
 
   // 「关于」分区：入口在那行版本的位置（about-entry 点击时切到本分区）。
   ctx.slots.inject('settings.section', () => ctx.slots.register({

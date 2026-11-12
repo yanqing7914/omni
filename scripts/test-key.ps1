@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Continue'
 $base = 'http://127.0.0.1:3081'
-$tmp = 'D:\coding\dsh-mobile\.deploy-tmp'
+$tmp = Join-Path (Split-Path -Parent $PSScriptRoot) '.deploy-tmp'
 [IO.File]::WriteAllText((Join-Path $tmp 'req-c.json'), '{"type":"client-request","rpcId":"k-1","method":"session.create","payload":{}}')
 $r1 = curl.exe -s -m 10 -X POST -H 'Content-Type: application/json' --data-binary ("@" + (Join-Path $tmp 'req-c.json')) ($base + '/api/session.create')
 $sid = ($r1 | ConvertFrom-Json).result.value.sessionId

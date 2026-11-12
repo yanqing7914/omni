@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "categories": [
+    {
+      "id": "documents",
+      "title": {
+        "en": "Documents",
+        "zh": "文档处理"
+      }
+    },
+    {
+      "id": "productivity",
+      "title": {
+        "en": "Productivity",
+        "zh": "效率工具"
+      }
+    },
+    {
+      "id": "writing",
+      "title": {
+        "en": "Writing",
+        "zh": "写作"
+      }
+    },
+    {
+      "id": "shopping",
+      "title": {
+        "en": "Shopping",
+        "zh": "购物"
+      }
+    },
+    {
+      "id": "media",
+      "title": {
+        "en": "Images",
+        "zh": "图像"
+      }
+    }
+  ],
+  "skills": [
+    {
+      "id": "git-commit-message",
+      "name": "git-commit-message",
+      "title": {
+        "en": "Git Commit Message",
+        "zh": "Git 提交说明"
+      },
+      "description": {
+        "en": "Write and review commit messages from the staged diff, with an imperative subject, a why-focused body and issue references.",
+        "zh": "根据暂存区差异撰写和审阅提交说明：祈使句主题、解释原因的主体与 issue 引用。"
+      },
+      "category": "writing",
+      "license": "MIT",
+      "local": true,
+      "source": {
+        "ref": "main",
+        "path": "market/skills/git-commit-message"
+      }
+    },
+    {
+      "id": "docx",
+      "name": "docx",
+      "title": {
+        "en": "Word Documents",
+        "zh": "Word 文档"
+      },
+      "description": {
+        "en": "Create, read, edit and validate .docx and .dotx files, including tracked changes, comments, tables and document conversion.",
+        "zh": "创建、读取、编辑与校验 .docx/.dotx 文件，支持修订、批注、表格与文档转换。"
+      },
+      "category": "documents",
+      "license": "Apache-2.0",
+      "source": {
+        "owner": "anthropics",
+        "repo": "skills",
+        "ref": "2c5958ecac7cee2b583967a2c4981d0f4a75c579",
+        "path": "skills/docx"
+      }
+    },
+    {
+      "id": "define-goal",
+      "name": "define-goal",
+      "title": {
+        "en": "Define a Goal",
+        "zh": "定义目标"
+      },
+      "description": {
+        "en": "Turn a fuzzy intention into a concrete, measurable goal with explicit success criteria before starting work.",
+        "zh": "在开始工作前把模糊意图变成具体、可度量且有明确成功标准的目标。"
+      },
+      "category": "productivity",
+      "license": "Apache-2.0",
+      "source": {
+        "owner": "openai",
+        "repo": "skills",
+        "ref": "49f948faa9258a0c61caceaf225e179651397431",
+        "path": "skills/.curated/define-goal"
+      }
+    },
+    {
+      "id": "screenshot",
+      "name": "screenshot",
+      "title": {
+        "en": "System Screenshot",
+        "zh": "系统截图"
+      },
+      "description": {
+        "en": "Capture a desktop or window screenshot when the user asks for one or when tool-specific capture is unavailable.",
+        "zh": "在用户明确要求截图或专用截图能力不可用时，捕获桌面或窗口截图。"
+      },
+      "category": "productivity",
+      "license": "Apache-2.0",
+      "source": {
+        "owner": "openai",
+        "repo": "skills",
+        "ref": "49f948faa9258a0c61caceaf225e179651397431",
+        "path": "skills/.curated/screenshot"
+      }
+    },
+    {
+      "id": "taobao-app-shopping",
+      "name": "taobao-app-shopping",
+      "title": {
+        "en": "Taobao App Shopping",
+        "zh": "淘宝 App 购物"
+      },
+      "description": {
+        "en": "Search, compare and inspect products inside the Taobao or Tmall Android app, and manage the cart. Never pays or submits an order without your confirmation.",
+        "zh": "在手机淘宝/天猫 App 里搜索、比价、看详情与管理购物车；下单和付款前一定先问你。"
+      },
+      "category": "shopping",
+      "license": "MIT",
+      "requires": ["a11y", "real-screen"],
+      "local": true,
+      "source": {
+        "ref": "main",
+        "path": "market/skills/taobao-app-shopping"
+      }
+    },
+    {
+      "id": "image-style-prompt",
+      "name": "image-style-prompt",
+      "title": {
+        "en": "Image Restyle Prompt",
+        "zh": "图片风格改写提示词"
+      },
+      "description": {
+        "en": "Turn a restyle request into a structured prompt for an image tool, with subject preservation and negative prompts.",
+        "zh": "把「换成某种风格」写成可直接粘贴的结构化提示词，含主体保持项与负面提示。"
+      },
+      "category": "media",
+      "license": "MIT",
+      "local": true,
+      "source": {
+        "ref": "main",
+        "path": "market/skills/image-style-prompt"
+      }
+    },
+    {
+      "id": "image-cleanup-checklist",
+      "name": "image-cleanup-checklist",
+      "title": {
+        "en": "Image Cleanup Checklist",
+        "zh": "图片整理清单"
+      },
+      "description": {
+        "en": "Review a photo or product image and produce a concrete must-fix / should-fix list before it is published.",
+        "zh": "检查照片或商品图，给出必须改/建议改的具体清单，含裁剪、色偏、合规检查。"
+      },
+      "category": "media",
+      "license": "MIT",
+      "local": true,
+      "source": {
+        "ref": "main",
+        "path": "market/skills/image-cleanup-checklist"
+      }
+    }
+  ]
+}

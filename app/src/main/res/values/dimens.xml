@@ -19,8 +19,16 @@
   <dimen name="ds_radius_pill">999dp</dimen>
   <dimen name="ds_radius_icon">18dp</dimen>
   <dimen name="ds_progress_height">5dp</dimen>
+  <!-- 启动页解压进度条与上方说明之间的留白（首装等待期的视觉主体，比卡内其它段落多一档）。 -->
+  <dimen name="ds_guide_progress_top_gap">24dp</dimen>
   <dimen name="ds_logo_size">28dp</dimen>
   <dimen name="ds_logo_shell">52dp</dimen>
+  <!-- 启动页品牌区（竖排居中）：底板 72dp、图标 36dp。比旧横排档大一号，
+       是因为它现在是首屏唯一的视觉锚点，不再靠横向布局里的标题列分担重量。 -->
+  <dimen name="ds_guide_logo_plate">72dp</dimen>
+  <dimen name="ds_guide_logo_mark">36dp</dimen>
+  <!-- 主按钮「进行中」收紧档：高度复用 ds_btn_secondary_height，宽度压到这一档。 -->
+  <dimen name="ds_guide_primary_compact_width">176dp</dimen>
   <dimen name="ds_btn_height">52dp</dimen>
   <dimen name="ds_btn_secondary_height">48dp</dimen>
   <dimen name="ds_dot">8dp</dimen>

@@ -1,114 +1,80 @@
-# Contributing
+# Development workflow
 
 [中文版](CONTRIBUTING.md)
 
-This repository is the Android shell for DeepSeek Harness. Read [`AGENTS.md`](AGENTS.md) first: it holds the project map, build commands, device acceptance rules and documentation protocol.
+Omni is an Android client for DeepSeek Harness. Read [`AGENTS.md`](AGENTS.md) first for the project map, build commands, and known pitfalls.
 
-## Repository scope
+## Branches
 
-- This repository owns shell Kotlin, the bridge protocol, accessibility and virtual display, the Shizuku channel, build gates and the release chain.
-- Engine-side plugins, injection layers and snapshot configuration live in the private coordination repository `yanqing7914/omni`. External contributors only need this repository; maintainers mirror coordination-side changes.
-- Upstream `deepseek-harness` is read-only. Adapt through patches, plugins or the shell.
-
-## Branches and commits
-
-- The default branch is `main`. Never push to it directly; every change goes through a branch and a pull request.
-- Name branches `<type>/<short-description>`; write commit messages as `<type>: <description>` with type from `feat` / `fix` / `docs` / `chore` / `refactor` / `test` / `ci`.
-- One pull request contains one logical change that can be reverted on its own.
-
-## Field notes
-
-Do not pile every finding into one file. `docs/AGENTS/gotchas.md` is the shared summary maintained by merging stable conclusions; day-to-day notes live in your own file, named after your GitHub account:
-
-```
-docs/contrib/<github-account>/YYYY-MM-DD-<topic>.md
-```
-
-Write all four parts: symptom, root cause, fix, verification evidence. A note that only says what to do will not help the next person. Durable, general findings are merged into the matching document under `docs/AGENTS/`, keeping your original file and noting where it went.
-
-## New interfaces must be bilingual
-
-Not every user reads Chinese. Every **new** custom interface (page, panel, dialog, overlay, setting, notification channel name and description, error message, button, placeholder) ships in both Chinese and English:
-
-- Page-side plugins use the existing locale channel: register `zh` and `en` dictionaries for one namespace with identical keys and placeholders.
-- Native shell text in `strings.xml` or Kotlin needs an English counterpart.
-- The interface updates when the language changes; do not cache strings read once at startup.
-- Never show machine codes, internal keys or enum values. A Chinese-only interface is incomplete. Existing interfaces are not retrofitted by rule, but any block you rewrite or extend must be completed in both languages.
-
-## Pull requests
-
-Write the title and description in Chinese, or provide a Chinese and English version. Keep sentences short and readable. Describe the change, the reason, the verification and the scope. If you did not run on-device acceptance, say so explicitly. Fill in all four state-registration fields in the template, or write `none` with a reason.
-
-Match evidence to risk:
-
-| Change | Required evidence |
-|---|---|
-| Documentation, comments | Self-check passes; no build needed |
-| Gates, build scripts | The gate's `--self-test` plus one controlled negative control |
-| Security-sensitive areas (snapshot transactions, signing, gate predicates, bridge protocol) | Code, CDP and ADB user-level acceptance in the same round |
-| UI and shell behavior | Emulator acceptance in all three layers, portrait and landscape |
-
-Paste the command and the key output. If a test was not run, say it was not run.
-
-## Device acceptance
-
-A UI, shell-behavior or security-sensitive change must carry a device-acceptance section **in the PR body**. Use exactly one of the two states below; leave it empty or write both and the review is rejected. The state block is a fact recorded in the body — writing it needs no special permission.
-
-### State A: acceptance was run
-
-State the evidence and the verdict:
-
-- Three evidence elements: **tree@sha** · **device serial** · **case name**; attach screenshots as a path or link;
-- Verdict: `PASS`, or `FAIL` with a reason.
-
-### State B: request acceptance
-
-If you cannot run a device yourself, do not stop at "no device verification". Write a card someone else can execute:
-
-- Device prerequisites: Android version / package (versionName or head sha) / permission state;
-- Steps: 1. 2. 3. … — forward-looking and executable, down to the command or the tap target;
-- Expected observable: concrete values, copy, log lines, controls that must appear;
-- What failure looks like: counterexamples.
-
-### Four rules
-
-1. **All three evidence elements are mandatory** (tree@sha + device serial + case name): without the sha nobody knows which commit was verified.
-2. **Expectations must be values or copy**, never "works", "fine" or "ok": such words cannot go red, so the expectation does not exist.
-3. **The package version in the card must match what gets installed** (head sha or versionName): install a different build and the result proves nothing about this PR.
-4. **On FAIL, commit on the same branch and force-push; do not open a new PR**: this keeps review and acceptance history together instead of splitting one change into unrelated threads.
-
-### Who does what
-
-| Role | Does | Permission needed |
+| Branch | Purpose | Rule |
 |---|---|---|
-| Contributor | Writes "State A (verified, with evidence)" or "State B (request acceptance, with forward steps / expectations / failure samples)" **in the PR body** | None |
-| Maintainer | Reads the card, then applies `needs-device-verification` as an **internal scheduling marker** | triage |
-| Acceptance specialist | Only handles labelled PRs; changes no code, does not merge, writes back `PASS`/`FAIL` and the raw output | None |
+| `main` | Stable releases; what users install | Only accepts PRs from `dev`; no direct pushes |
+| `dev` | Test builds; day-to-day work lands here | Merged via PR once PR Gate is green |
+| `feat/…` `fix/…` `docs/…` `chore/…` | One change per branch | Branch from `dev`, delete after merge |
+| `upgrade/dsh-<version>` | DeepSeek Harness engine upgrade | See "Engine upgrade" |
 
-**The state block is the fact in the body; the label is only the maintainer's index.** Therefore:
+Commit messages: `<type>: <description>`, with type one of `feat` / `fix` / `docs` / `chore` / `refactor` / `test` / `ci`. One PR does one thing and can be reverted on its own.
 
-- Contributors cannot apply labels and do not need to — putting your card in the body is enough;
-- The other way round, **without a card the maintainer cannot schedule anything**: a PR with a label but no State B card is sent back for one;
-- Maintainers add and remove the label; do not pester for it — writing a complete card is more useful than asking once more.
+## Day-to-day
 
-The specialist changes no code and does not merge; they only write back `PASS`/`FAIL` with the raw output (commands, key stdout, screenshot paths).
+1. Branch from the latest `dev`: `git switch dev && git pull && git switch -c feat/xxx`
+2. Build and test locally (see `AGENTS.md`):
+   ```bash
+   ./gradlew :app:assembleDebug :app:testDebugUnitTest
+   ```
+3. If the change touches UI or device behavior, try it on a phone.
+4. Push and open a PR against `dev`. Say what changed, why, and how it was verified. If it was not tried on a device, say so.
+5. Merge once PR Gate is green, then delete the branch.
 
-### A new commit invalidates the card
+New UI text ships in both Chinese and English.
 
-The card is bound to a sha. After you add a commit the old evidence no longer points at the current HEAD, so write a fresh State B card instead of reusing the previous verdict.
+## Versioning
 
-## Self-review before pushing
+| Version | versionCode |
+|---|---|
+| 1.0.0 | 10000 |
+| 1.0.1 … 1.0.99 | 10001 … 10099 |
+| 1.1.0 | 10100 |
 
-Read the full diff, stage only the files that belong to the change (do not run `git add .`), and make sure these commands report nothing:
+`versionCode = major × 10000 + minor × 100 + patch`, patch 0–99. Both live in `app/build.gradle.kts` and are bumped together on every release.
 
-```powershell
+- Without a higher versionCode, Android refuses the in-place update.
+- Without a higher versionName, the in-app update check always reports up to date.
+
+## Releasing
+
+1. On a `chore/release-1.0.x` branch from `dev`: bump the version, write `release/v1.0.x/notes.md`, merge into `dev`.
+2. After the test build has been used on a phone without problems, open a PR from `dev` to `main`.
+3. Run the `release` workflow in Actions with version `1.0.x`. It builds, runs the gates, and creates a draft Release with `omni-v1.0.x-arm64.apk` and `MANIFEST.txt`.
+4. Check the draft, then publish it. The download site refreshes automatically.
+5. Users update from "Check for updates" in the app; data is kept.
+
+Every stable release must be signed with the same release key; changing it forces users to uninstall.
+
+- The key never goes into the repository. CI restores it from Secrets (`OMNI_RELEASE_KEYSTORE_BASE64`, `OMNI_RELEASE_KEYSTORE_PASSWORD`, `OMNI_RELEASE_KEY_ALIAS`); see `scripts/ci/restore-release-key.sh`.
+- For a releasable local build, `source ~/.omni-release/env.sh` before running Gradle. Without those variables the build is signed with the repository's `keystore/debug.keystore`, which the signature gate rejects; use it for local debugging only.
+- The signature gate accepts only the certificate digest in `scripts/fixtures/apk-expected-cert.sha256`.
+
+## Engine upgrade
+
+When DeepSeek Harness publishes a new `@deepseek-ai/dsh` on npm:
+
+1. Branch `upgrade/dsh-<version>` from `dev`.
+2. Update the versions in `scripts/snapshot-config/engine-overlay.json`.
+3. Review the runtime patches in `scripts/patches/`: drop ones the new release already fixes, re-target ones that no longer apply.
+4. Rebuild the snapshot, run the gates and tests, verify on a phone.
+5. Merge into `dev`, then follow "Releasing".
+
+Prefer building features as plugins (`plugins/`) over changing the engine, so upgrades stay conflict-free.
+
+## Before committing
+
+```bash
 git diff --check
-git diff --stat
 git status --short
 git diff --cached --stat
 ```
 
-No debug leftovers or local paths; no credentials or device serial numbers; new interfaces checked in Chinese and English; commit message matches the change; the verification in the pull request was actually run; the description reads cleanly; one to three labels set.
-
-Delete the branch after merging.
-
+- Stage only the files for this change; avoid `git add .`.
+- No debug leftovers, local paths, API keys, or device serials.
+- Snapshots, APKs, and other large binaries stay out of git.

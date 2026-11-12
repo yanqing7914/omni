@@ -574,3 +574,37 @@ describe('一级行的图标（只装饰我方自有分区）', () => {
     expect(row.querySelector('svg'), '上游 svg 必须仍在行里').not.toBeNull()
   })
 })
+
+describe('「订阅」一级行隐藏（2026-11-09 用户定）', () => {
+  it('首页给订阅行打隐藏标记，其余行不受影响', () => {
+    const handle = buildPanel(['通用设置', '订阅', '开发者选项'])
+    nav = new MobileSettingsNav()
+    nav.attach()
+    expect(handle.rows.get('订阅')!.hasAttribute('data-dsh-settings-nav-hidden')).toBe(true)
+    expect(handle.rows.get('通用设置')!.hasAttribute('data-dsh-settings-nav-hidden')).toBe(false)
+    expect(handle.rows.get('开发者选项')!.hasAttribute('data-dsh-settings-nav-hidden')).toBe(false)
+  })
+
+  it('英文 label 同样隐藏；不再往任何二级页注入入口行', () => {
+    const handle = buildPanel(['账号与余额', 'Subscriptions'])
+    nav = new MobileSettingsNav()
+    nav.attach()
+    expect(handle.rows.get('Subscriptions')!.hasAttribute('data-dsh-settings-nav-hidden')).toBe(true)
+    handle.rows.get('账号与余额')!.click()
+    expect(handle.panel.querySelector('[data-dsh-settings-account-extra]')).toBeNull()
+  })
+
+  it('收回（detach）后去掉标记，订阅行原样复原', () => {
+    const handle = buildPanel(['订阅'])
+    nav = new MobileSettingsNav()
+    nav.attach()
+    nav.detach()
+    nav = undefined
+    expect(handle.rows.get('订阅')!.hasAttribute('data-dsh-settings-nav-hidden')).toBe(false)
+  })
+
+  it('CSS 里确有按该标记隐藏一级行的规则', () => {
+    const css = readFileSync('src/client/mobile-settings.css.ts', 'utf8')
+    expect(css).toMatch(/> nav button\[data-dsh-settings-nav-hidden\] \{\s*display: none;/)
+  })
+})

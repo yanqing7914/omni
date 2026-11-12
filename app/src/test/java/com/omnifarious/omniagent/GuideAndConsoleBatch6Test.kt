@@ -97,6 +97,12 @@ class GuideAndConsoleBatch6Test {
   }
 
   // ── S1-4 → 0.14.2 P2：进度去数字 + 阶段车轱辘话（旧判据按新口径改写，不是删除）──
+  //
+  // 再改口径（真实进度）：0.14.2 下线数字是因为分母编造（压缩长度/700MB 常数）。分母现在来自 xz index
+  // 的解压后总量（XzIndexTotal），分子同口径，所以百分比与剩余时间可以回来——但**只能来自进度模型**。
+  // 判据由「文案不得含数字」（stagePhraseHasNoNumbers）改为「数字必须有来源」（numbersOnlyFromModel）：
+  // 不确定态（无总量）下它退化成旧规则，整句不得含数字；确定态下扣掉模型格式化的那几段后不得含数字。
+  // 模型本身的用例在 RuntimeExtractProgressTest（A1–A6）。
 
   @Test
   fun `阶段文案只有车轱辘话且不含任何数字`() {
@@ -104,7 +110,8 @@ class GuideAndConsoleBatch6Test {
     // 正在解压，正在处理残留数据，正在准备运行时这种车轱辘话」。
     assertTrue("至少要给三条阶段句（覆盖解压/残留/收尾）", RUNTIME_STAGE_PHRASES.size >= 3)
     for (phrase in RUNTIME_STAGE_PHRASES) {
-      assertTrue("阶段句必须自证无数字无百分比：$phrase", stagePhraseHasNoNumbers(phrase))
+      // 阶段句不属于进度模型的格式化段，所以模型段为空 ⇒ 必须整句无数字（不确定态兜底时显示的就是它们）。
+      assertTrue("阶段句里的数字没有来源：$phrase", numbersOnlyFromModel(phrase, emptyList()))
     }
     // 三条必须点名用户说的那三类阶段（不能拿三句同义话凑数）。
     assertTrue("必须覆盖「正在解压」", RUNTIME_STAGE_PHRASES.any { it.contains("正在解压") })
@@ -124,39 +131,44 @@ class GuideAndConsoleBatch6Test {
   }
 
   @Test
-  fun `进度面不再出现任何数字文案与确定档（设备实测缺陷）`() {
+  fun `进度面的数字只来自真实总量的进度模型（设备实测缺陷）`() {
     // 设备读数（真机）：「已写入 1157 MB / 约 700 MB（99%）」——分子大于分母还报 99%。
-    // 真因是分母（700MB）本身编造，而真实解压是增量的 ⇒ 任何固定分母都在造事实。
-    // 本用例锁「三种数字输出全部下线 + 进度条恒不确定态 + 编造常数与其派生函数一并删除」。
+    // 真因是分母（700MB / 压缩长度）编造。现在分母来自 xz index，本用例改锁：
+    // 编造常数与旧派生函数不得回来；确定态只能由进度模型驱动；不确定态兜底仍在。
     val code = codeOnly(source("GuidePageRenderer.kt"))
     // ① 编造的分母及其两个派生输出：一条都不许留（死码）。
     assertFalse("编造常数必须删除", code.contains("RUNTIME_UNCOMPRESSED_APPROX_BYTES"))
-    assertFalse("百分比函数必须删除", code.contains("runtimeProgressPercent"))
-    assertFalse("带数字的进度文案函数必须删除", code.contains("runtimeProgressLabel"))
-    assertFalse("确定档入口必须删除（它宣称的正是编造比例）", code.contains("setDeterminateProgress"))
-    assertFalse("进度状态位必须删除", code.contains("progressDeterminate"))
-    // ② 三种数字输出的字面形态一个都不许回来。
+    assertFalse("旧百分比函数必须删除", code.contains("runtimeProgressPercent"))
+    assertFalse("旧带数字的进度文案函数必须删除", code.contains("runtimeProgressLabel"))
+    assertFalse("旧确定档入口必须删除（它宣称的正是编造比例）", code.contains("setDeterminateProgress"))
+    // ② 旧的手拼数字形态一个都不许回来（新数字只经 view.percentLabel / view.etaLabel 写入）。
     assertFalse("不得出现「已写入」", code.contains("已写入"))
     assertFalse("不得出现「约 」+ MB 的分母形态", code.contains("/ 约 "))
     assertFalse("不得出现百分比拼接", code.contains("%\"") || code.contains("%）") || code.contains("（\" + pct"))
-    // ③ 进度条必须恒为不确定态（不宣称比例），且相位切换与阶段入口两处都要置位。
+    // ③ 不确定态兜底：相位切换与阶段入口两处都要置位（无总量时就停在这里）。
     val indeterminate = Regex(Regex.escape("progressBar.isIndeterminate = true")).findAll(code).count()
-    assertTrue("相位切换处必须置不确定态", code.contains("progressBar.isIndeterminate = true"))
-    assertTrue("进度条不得被切回确定态", !code.contains("isIndeterminate = pct") && !code.contains("progressBar.progress ="))
     assertTrue("确定态置位点至少两处（相位切换 + 阶段入口）: 实测 $indeterminate", indeterminate >= 2)
-    // ④ 旧形态（旧注释里的实现在场即判红——反证锚点）。
+    // ④ 确定态只有一个入口，且比例来自模型的 percent。
+    assertEquals("切确定态只能有一处", 1, Regex(Regex.escape("progressBar.isIndeterminate = false")).findAll(code).count())
+    assertTrue("确定态比例必须来自进度模型", code.contains("val pct = view.percent ?: return"))
+    assertTrue("确定态必须经 RuntimeExtractProgress", code.contains("extractProgress.update(nowMs, done, total, english)"))
+    assertFalse("不得直接写 progress 字段", code.contains("progressBar.progress ="))
+    // ⑤ 旧形态（旧注释里的实现在场即判红——反证锚点）。
     assertFalse("旧的确定档渲染不得留存桩", code.contains("val pct = runtimeProgressPercent"))
   }
 
   @Test
-  fun `解压流程只推阶段轮换而不渲染任何数字`() {
+  fun `解压流程只把原始字节交给进度模型而不自己渲染数字`() {
     val flow = codeOnly(source("EngineStartFlow.kt"))
     // FX1-A：调用点从「次数驱动」改成「时间驱动」——传单调时钟而不是 tick 计数。
     // 旧形态 `showRuntimeStage(progressTick++)` = 每次回调换一句 = 用户看到的「一直在闪」。
+    // 真实进度后：流程把 (单调时钟, done, total) 原样交给渲染层，由它决定确定态还是不确定态轮换。
+    assertTrue("回调里取单调时钟", flow.contains("val nowMs = SystemClock.elapsedRealtime()"))
     assertTrue(
-      "流程必须走阶段入口（传单调时钟）",
-      flow.contains("showRuntimeStage(SystemClock.elapsedRealtime())"),
+      "流程必须走进度入口（传单调时钟与原始字节）",
+      flow.contains("showExtractProgress(nowMs, done, total)"),
     )
+    assertTrue("完成后才把百分比推到 100", flow.contains("activity.guideRenderer.finishExtractProgress()"))
     assertFalse("不得退回按回调次数换句（闪的成因）", flow.contains("progressTick++"))
     assertTrue("刷新开始前必须复位轮换（第一句立刻可见、时间窗重新起算）", flow.contains("resetRuntimeStageRotation()"))
     assertFalse("流程不得再调确定档", flow.contains("setDeterminateProgress"))
@@ -216,7 +228,7 @@ class GuideAndConsoleBatch6Test {
     assertTrue(r.advanceIfDue(t0 + STAGE_ROTATE_INTERVAL_MS * 3))
     assertEquals("应回绕到第一句", RUNTIME_STAGE_PHRASES[0], r.currentPhrase())
     assertEquals("序号按模回绕（不靠 Int 溢出）", 0, r.index)
-    for (p in RUNTIME_STAGE_PHRASES) assertTrue("轮换出的句子必须仍是无数字阶段句", stagePhraseHasNoNumbers(p))
+    for (p in RUNTIME_STAGE_PHRASES) assertTrue("轮换出的句子必须仍是无数字阶段句", numbersOnlyFromModel(p, emptyList()))
   }
 
   /** 反证 (c)：异常输入（负 tick / 极大 tick / 时钟回拨）仍安全，且不制造闪烁或冻死。 */

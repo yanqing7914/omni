@@ -39,7 +39,7 @@ import { SHELL_OPS } from './shell-ops.js'
 // 逐行累积，遇到不以 ' 或 | 结尾的行即停止；在联合内部插注释会把后续 op（含 vd*/sh*）整段截掉，
 // 门禁会以「族未落地」形式集体报红（本批实测）。
 export type ControlOp = 'snapshot' | 'click' | 'longClick' | 'setText' | 'scroll' | 'global' | 'screenshot' | 'state'
-  | 'nodeText' | 'webSnapshot' | 'webAction'
+  | 'nodeText' | 'webSnapshot' | 'webAction' | 'appLaunch'
   | 'browserCaps' | 'browserShow' | 'browserHide' | 'browserClose' | 'browserOpen' | 'browserJs'
   | 'browserInput' | 'browserShot' | 'browserState' | 'browserSetUa' | 'browserViewport'
   | 'browserTabs' | 'browserFollowTab' | 'browserCloseTab'
@@ -77,7 +77,7 @@ export const REQUIRED_SESSION_MODE = 'danger-full-access'
  *  **browser\* / vd\*（15 条）刻意不在此列**：契约 neverA11y，见上方 ControlOp 注释与
  *  scripts/control-ops-known-gaps.json 的永久豁免。 */
 export const A11Y_OPS: readonly ControlOp[] = [
-  'snapshot', 'click', 'longClick', 'setText', 'scroll', 'global', 'screenshot', 'state', 'nodeText', 'webSnapshot', 'webAction',
+  'snapshot', 'click', 'longClick', 'setText', 'scroll', 'global', 'screenshot', 'state', 'nodeText', 'webSnapshot', 'webAction', 'appLaunch',
 ]
 
 export function decideControl(input: ControlPolicyInput): ControlDecision {

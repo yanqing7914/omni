@@ -590,7 +590,8 @@ internal object ShellOps {
         + " dumpsys window|display|input / am / monkey / sendevent / getevent）。"
         + "命令里显式指定的目标屏若确为**已注册虚拟屏**（DisplayManager displayId 或该屏的 SurfaceFlinger token）即可放行；"
         + "本条命令的目标屏未能与壳侧注册表核对上，故拒绝。请确认虚拟屏仍在活跃状态"
-        + "（android_vdisplay_create / vdInfo），或由用户在设置中修改范围后重试。")
+        + "（android_vdisplay_create / vdInfo），或由用户在 Omni 的「设置 → 扩展 → 技能」页、"
+        + "该技能行点「允许」按钮放开屏幕范围（改为 all）后重试。")
       .put("reason", "screen-out-of-scope")
       .put("op", "shExec")
   }

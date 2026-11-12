@@ -141,7 +141,7 @@ export function assembleApk(options, runner = spawnSync) {
   // 把验签挪进终端阶段（拷贝之前）后，「交付目录里的 APK 都是验过的」由构造保证，
   // 不再依赖调用方记得在哪一步调门禁。调用方的 --dir 复扫保留（它还能兜住陈旧文件）。
   if (verifySignatures) {
-    const keystorePath = options.keystore ?? join(SCRIPT_DIR, '..', 'keystore', 'debug.keystore')
+    const keystorePath = resolveEngineKeystore({ keystore: options.keystore })
     verifyApks({
       files: [builtApk],
       keystore: keystorePath,
@@ -193,15 +193,38 @@ export function assembleApk(options, runner = spawnSync) {
  */
 export const REPO_DEBUG_KEYSTORE_CREDENTIALS = Object.freeze({ alias: 'androiddebugkey', pass: 'android' })
 
-/** 凭据优先级：显式参数 > 环境变量 > 仓库 debug keystore 的公开凭据。 */
+/**
+ * Omni 正式发布密钥的环境变量（与 app/build.gradle.kts 同一组）。三个都在时 Gradle 用它签名，
+ * 本引擎也用它做 keystore 交叉核对；缺任一个则回到仓库 debug keystore（那种产物过不了证书锚，不可发布）。
+ */
+export const OMNI_RELEASE_KEY_ENV = Object.freeze({
+  keystore: 'OMNI_RELEASE_KEYSTORE',
+  pass: 'OMNI_RELEASE_KEYSTORE_PASSWORD',
+  alias: 'OMNI_RELEASE_KEY_ALIAS',
+})
+
+export function resolveReleaseKey(env = process.env) {
+  const keystore = env?.[OMNI_RELEASE_KEY_ENV.keystore]
+  const pass = env?.[OMNI_RELEASE_KEY_ENV.pass]
+  const alias = env?.[OMNI_RELEASE_KEY_ENV.alias]
+  return keystore && pass && alias ? { keystore, alias, pass } : null
+}
+
+/** keystore 路径优先级：显式参数 > 正式发布密钥环境变量 > 仓库 debug keystore。 */
+export function resolveEngineKeystore({ keystore, env = process.env } = {}) {
+  return keystore ?? resolveReleaseKey(env)?.keystore ?? join(SCRIPT_DIR, '..', 'keystore', 'debug.keystore')
+}
+
+/** 凭据优先级：显式参数 > DSH_APK_KEYSTORE_* > 正式发布密钥环境变量 > 仓库 debug keystore 的公开凭据。 */
 export function resolveEngineKeystoreCredentials({ keystoreAlias, keystorePass, env = process.env } = {}) {
+  const release = resolveReleaseKey(env)
   return {
-    alias: keystoreAlias ?? (env?.DSH_APK_KEYSTORE_ALIAS || REPO_DEBUG_KEYSTORE_CREDENTIALS.alias),
-    pass: keystorePass ?? (env?.DSH_APK_KEYSTORE_PASS || REPO_DEBUG_KEYSTORE_CREDENTIALS.pass),
+    alias: keystoreAlias ?? (env?.DSH_APK_KEYSTORE_ALIAS || release?.alias || REPO_DEBUG_KEYSTORE_CREDENTIALS.alias),
+    pass: keystorePass ?? (env?.DSH_APK_KEYSTORE_PASS || release?.pass || REPO_DEBUG_KEYSTORE_CREDENTIALS.pass),
   }
 }
 
-export function verifyApks({ directories = [], files = [], signatureGate = join(SCRIPT_DIR, 'check-apk-signatures.mjs'), formGate = join(SCRIPT_DIR, 'check-apk-form.mjs'), keystore = join(SCRIPT_DIR, '..', 'keystore', 'debug.keystore'), keystoreAlias, keystorePass, selfTest = true, log = console.log }, runner = spawnSync) {
+export function verifyApks({ directories = [], files = [], signatureGate = join(SCRIPT_DIR, 'check-apk-signatures.mjs'), formGate = join(SCRIPT_DIR, 'check-apk-form.mjs'), keystore, keystoreAlias, keystorePass, selfTest = true, log = console.log }, runner = spawnSync) {
   const targets = [...directories.flatMap((directory) => ['--dir', resolve(directory)]),
     ...files.flatMap((file) => ['--apk', resolve(file)])]
   if (!targets.length) throw new Error('signature verification requires at least one directory or APK')
@@ -210,7 +233,7 @@ export function verifyApks({ directories = [], files = [], signatureGate = join(
   const { alias, pass } = resolveEngineKeystoreCredentials({ keystoreAlias, keystorePass })
   log('验证最终输出 APK 的 v1/v2/v3 签名…')
   if (selfTest) execute(process.execPath, [signatureGate, '--self-test'], { cwd: SCRIPT_DIR }, runner)
-  execute(process.execPath, [signatureGate, ...targets, '--keystore', resolve(keystore),
+  execute(process.execPath, [signatureGate, ...targets, '--keystore', resolve(resolveEngineKeystore({ keystore })),
     '--keystore-alias', alias, '--keystore-pass', pass], { cwd: SCRIPT_DIR }, runner)
   log('验证最终输出 APK 的产物形态（不得含 application-debuggable）…')
   if (selfTest) execute(process.execPath, [formGate, '--self-test'], { cwd: SCRIPT_DIR }, runner)

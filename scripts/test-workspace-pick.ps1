@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Continue'
 $base = 'http://127.0.0.1:3081'
-$tmp = 'D:\coding\dsh-mobile\.deploy-tmp'
+$tmp = Join-Path (Split-Path -Parent $PSScriptRoot) '.deploy-tmp'
 # 1. start pick RPC in background (long-lived connection)
 [IO.File]::WriteAllText((Join-Path $tmp 'req-pick.json'), '{"type":"client-request","rpcId":"pick-7","method":"host.pickDirectory","payload":{}}')
 $job = Start-Job -ScriptBlock { param($base, $tmp)

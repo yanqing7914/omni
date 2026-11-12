@@ -19,15 +19,15 @@ android {
     // (the embedded engine, bash, and every child command would need linker64
     // wrappers); 34 keeps native exec working on Android 15/16 devices.
     targetSdk = 34
-    // 0.14.9：versionCode 53（覆盖安装 0.14.8(52)）。所有交付 APK 强制包含 v1/v2/v3 签名。
-    // 为什么必须升：UpdateChecker 的判据是 isNewer(tag, currentVersion())。若 versionName 仍等于上一个
-    // 已发布 tag（0.14.8），应用内更新对任何设备恒判 UpToDate —— 修好更新检测却送不出去。
-    versionCode = 53
+    // Omni 版本规则：versionName 主.次.修订（修订号 0–99），versionCode = 主×10000 + 次×100 + 修订
+    // （1.0.0 → 10000，1.0.99 → 10099，1.1.0 → 10100）。每次发版两者一起升：versionCode 决定能否覆盖安装，
+    // UpdateChecker 用 isNewer(tag, versionName) 判断有没有新版。所有交付 APK 强制包含 v1/v2/v3 签名。
+    versionCode = 10011
     // Snapshot builds append a suffix (e.g. -SN-1-RC13) via -PversionNameSuffix; release builds pass none.
     val snapshotSuffix = providers.gradleProperty("versionNameSuffix").getOrElse("")
     // 版本号单一来源：UI（GuidePageRenderer）、桥（androidBridge.version）、诊断日志、引擎环境变量
     // （DSH_APP_VERSION，见 EngineManager.engineEnv）全部读这里，禁止任何地方再硬编码版本字面量。
-    versionName = "0.14.9" + snapshotSuffix
+    versionName = "1.0.11" + snapshotSuffix
     buildConfigField("String", "TERMUX_VERSION", "\"0.118.3\"")
     // 0.14.0-preview：虚拟屏 P0 建屏矩阵走仪器测试入口（app UID 下运行 = P0-6 要测的调用者身份），
     // 不新增任何产品面（Activity/Bridge/Manifest 均不动）。见 .deploy-tmp/iter-0140/vdisplay-p0.md §8.8。
@@ -46,11 +46,33 @@ android {
     noCompress += "xz"
   }
 
+  // 发布签名：正式密钥不进仓库，只从环境变量读取（CI 来自 GitHub Secrets，本机来自
+  // ~/.omni-release/env.sh）。三个变量都在时 debug 与 release 都用它签，这样本机开发包
+  // 也能覆盖安装到装着正式版的手机上；缺任一个就退回仓库里的 repoDebug，那种包过不了
+  // 签名门禁（期望证书锚是正式密钥的指纹），不能发布。
+  val releaseKeystore = providers.environmentVariable("OMNI_RELEASE_KEYSTORE").orNull
+  val releaseKeystorePassword = providers.environmentVariable("OMNI_RELEASE_KEYSTORE_PASSWORD").orNull
+  val releaseKeyAlias = providers.environmentVariable("OMNI_RELEASE_KEY_ALIAS").orNull
+  val hasReleaseKey = !releaseKeystore.isNullOrBlank() && !releaseKeystorePassword.isNullOrBlank() && !releaseKeyAlias.isNullOrBlank()
+  if (hasReleaseKey && !file(releaseKeystore!!).isFile) {
+    throw GradleException("OMNI_RELEASE_KEYSTORE 指向的文件不存在: $releaseKeystore")
+  }
+  val shippingSigning = if (hasReleaseKey) "omniRelease" else "repoDebug"
+
   signingConfigs {
-    // Fixed debug signing from the repo keystore: CI and local builds must produce
-    // byte-compatible signatures, otherwise users cannot install over previous
-    // releases (INSTALL_FAILED_UPDATE_INCOMPATIBLE). AGP's default debug keystore
-    // lookup (~/.android/debug.keystore) is unreliable on CI runners, so pin it.
+    if (hasReleaseKey) {
+      create("omniRelease") {
+        storeFile = file(releaseKeystore!!)
+        storeType = "PKCS12"
+        storePassword = releaseKeystorePassword
+        keyAlias = releaseKeyAlias
+        keyPassword = releaseKeystorePassword
+        enableV1Signing = true
+        enableV2Signing = true
+        enableV3Signing = true
+      }
+    }
+    // 仓库内的开发密钥（口令公开）：只给没有正式密钥的本地构建用，产物不可发布。
     create("repoDebug") {
       storeFile = rootProject.file("keystore/debug.keystore")
       storePassword = "android"
@@ -66,10 +88,10 @@ android {
   buildTypes {
     release {
       isMinifyEnabled = false
-      signingConfig = signingConfigs.getByName("repoDebug")
+      signingConfig = signingConfigs.getByName(shippingSigning)
     }
     debug {
-      signingConfig = signingConfigs.getByName("repoDebug")
+      signingConfig = signingConfigs.getByName(shippingSigning)
     }
   }
 

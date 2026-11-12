@@ -240,6 +240,11 @@ export const MOBILE_SETTINGS_CSS: string = `
     display: none;
   }
 
+  /* 「订阅」一级行（settings-nav.ts 的 syncSubscriptionsEntry 打标记）：用户不用订阅账号登录，隐藏入口。 */
+  html[data-dsh-mobile-form] [data-dsh-settings-dialog][data-dsh-settings-level] > nav button[data-dsh-settings-nav-hidden] {
+    display: none;
+  }
+
   /* 不设 color：上游 navIcon 也只给 flex: none，颜色继承行本身——这里跟着继承，
      否则我方三个分类的图标会比上游分类的图标暗一档，同一张列表里两套观感。 */
   html[data-dsh-mobile-form] [data-dsh-settings-dialog][data-dsh-settings-level] > nav button > svg[data-dsh-settings-nav-icon] {
