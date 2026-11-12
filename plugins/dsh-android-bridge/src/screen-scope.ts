@@ -5,6 +5,14 @@ export type ScreenId = string
 export type UserScreenScope = 'virtual-only' | 'real-only' | 'all'
 
 export const DEFAULT_SCREEN_SCOPE: UserScreenScope = 'virtual-only'
+/**
+ * 偏好文件**不存在**时的取值（2026-11-11 用户定）：从未设置过 = all。
+ *
+ * 与壳侧 `ScreenScope.fromStored` 同一口径：设备控制的主场景是操作真实屏上的第三方 App；
+ * 缺省 virtual-only 会让淘宝这类技能装好即失败，而「手机控制」设置页已冻结。
+ * 注意只在文件不存在时生效：文件在但值损坏/无法读取仍走 [DEFAULT_SCREEN_SCOPE]（fail-closed）。
+ */
+export const UNSET_SCREEN_SCOPE: UserScreenScope = 'all'
 export const REAL_SCREEN_ID = 'real'
 export const VIRTUAL_SCREEN_ID = 'virtual-1'
 export const REAL_DISPLAY_ID = 0
@@ -1242,7 +1250,9 @@ export function currentScreenScope(env: NodeJS.ProcessEnv = process.env): UserSc
   if (path === undefined) return DEFAULT_SCREEN_SCOPE
   try {
     return parseScreenScopePrefsXml(readFileSync(path, 'utf8'))
-  } catch {
+  } catch (error) {
+    // 文件从未写入 = 用户没设置过（默认 all）；其它读取失败（权限/损坏/竞态）保持 fail-closed。
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return UNSET_SCREEN_SCOPE
     return DEFAULT_SCREEN_SCOPE
   }
 }
