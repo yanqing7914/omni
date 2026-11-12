@@ -2428,7 +2428,8 @@ properties: {
   const appLaunch = defineTool({
     name: 'android_app_launch',
     description:
-      '按包名拉起应用并回报前台 Activity。默认落真实屏；要开到虚拟屏必须传 screenId="virtual-N"（见 android_screen_list）。'
+      '按包名拉起应用并回报前台 Activity。默认落真实屏（走无障碍通道，不需要 ADB/Shizuku；失败才回退 ADB）；'
+      + '要开到虚拟屏必须传 screenId="virtual-N"（见 android_screen_list）。'
       + '**虚拟屏路径的落点是回读确认的**：返回 landedDisplayIds 与 displayId；若应用实际落在别的屏（例如它已在真实屏有任务），'
       + '返回 ok=false + code=vd-launch-denied，**不要把它当成功**。'
       + '包名先用 android_device_info 或 pm list packages 查。',
@@ -2495,13 +2496,40 @@ properties: {
           text: data.guidance ?? ('已在 ' + screenId + ' 上拉起 ' + pkg),
         }
       }
-      const cap = adbChannelOnly('app_launch', exec as { agent?: { session?: unknown } })
-      if (!cap.ok) return { ok: false, denied: true, pkg, text: cap.text }
       if (!/^[a-zA-Z][\w.]*$/.test(pkg)) return { ok: false, denied: false, pkg, text: '包名不合法：' + pkg }
-      if (!priv.execAdbShell) return { ok: false, denied: false, pkg, text: 'ADB 执行通道未接通' }
+      const wait = Math.max(500, Math.min(waitMs, 8000))
+      // 2026-11-12 真机实测：真实屏拉起此前只走特权 shell（monkey），Shizuku/ADB 未授权时
+      // 淘宝技能停在第一步。启动一个已安装应用不需要 shell——先走无障碍通道（壳侧
+      // PackageManager.getLaunchIntentForPackage），失败再回退 ADB。
+      const viaA11y = await a11yExec('appLaunch', { pkg }, 8000)
+      if (viaA11y.ok) {
+        await new Promise((resolve) => setTimeout(resolve, wait))
+        const fg = await foregroundInfo()
+        const matched = fg !== null && fg.pkg === pkg
+        const activeAlias = await activeVirtualAlias()
+        const hint = activeAlias === null
+          ? ''
+          : `（注意：本机有活跃虚拟屏 ${activeAlias}；若要它出现在虚拟屏上，请带 screenId="${activeAlias}" 重新拉起）`
+        return {
+          ok: true,
+          denied: false,
+          pkg,
+          foreground: fg ? `${fg.pkg}/${fg.activity}` : '',
+          text: `已拉起 ${pkg}（无障碍通道，无需 ADB）；前台 ${fg ? `${fg.pkg}/${fg.activity}` : '未知'}`
+            + (matched ? '' : '（未能确认前台是目标包——可能被权限弹窗/其他窗口遮挡，请 android_ui_dump 核对）') + hint,
+        }
+      }
+      const cap = adbChannelOnly('app_launch', exec as { agent?: { session?: unknown } })
+      if (!cap.ok) {
+        return {
+          ok: false, denied: false, pkg,
+          text: '拉起失败：' + (viaA11y.error ?? '无障碍通道不可用') + '；' + cap.text,
+        }
+      }
+      if (!priv.execAdbShell) return { ok: false, denied: false, pkg, text: '拉起失败：' + (viaA11y.error ?? '无障碍通道不可用') + '；ADB 执行通道未接通' }
       const r = await priv.execAdbShell(`monkey -p ${pkg} -c android.intent.category.LAUNCHER 1`)
       if (!r.ok) return { ok: false, denied: false, pkg, text: r.guidance ?? (r.stdout || '拉起失败') }
-      await new Promise((resolve) => setTimeout(resolve, Math.max(500, Math.min(waitMs, 8000))))
+      await new Promise((resolve) => setTimeout(resolve, wait))
       const fg = await foregroundInfo()
       const matched = fg !== null && fg.pkg === pkg
       // 兜底可发现性（0.14.0 设备实录）：模型漏传 screenId 时，本机可能恰好有活跃虚拟屏，

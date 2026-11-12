@@ -706,6 +706,7 @@ class DeviceControlService : AccessibilityService() {
       "nodeText" -> handleNodeText(args)
       "webSnapshot" -> handleWebSnapshot(args)
       "webAction" -> handleWebAction(args)
+      "appLaunch" -> handleAppLaunch(args)
       // ── 六面登记链已冻结、壳侧实现落地（browser* / vd*）：**必须逐条写分支** ──
       // 门禁 A 项断言「handle 分支集合 == SUPPORTED_OPS」；每个 op 单独一行，静态门禁按行首
       // 引号解析分支名（多值分支行会漏项）。browser* 不进 A11Y_OPS（契约 neverA11y），但由本
@@ -968,6 +969,30 @@ class DeviceControlService : AccessibilityService() {
     }
     if (json.isNullOrBlank()) return error("WebView DOM 求值返回空")
     return try { JSONObject(json) } catch (t: Throwable) { error("WebView DOM 结果解析失败：" + (t.message ?: "?")) }
+  }
+
+  /**
+   * 按包名拉起真实屏应用（2026-11-12，真机实测补口）。
+   *
+   * 为什么放在无障碍服务里：`android_app_launch` 原先只走特权 shell（`monkey -p`），Shizuku/ADB
+   * 未授权时整个淘宝技能停在第一步——而「启动一个已安装的 App」本来就不需要 shell：
+   * 本应用持有 QUERY_ALL_PACKAGES，`getLaunchIntentForPackage` 能直接拿到启动 Intent。
+   * 走无障碍通道后，只要用户开了无障碍（淘宝技能本来就要求），拉起不再依赖第二条通道。
+   *
+   * 注意：这是**用户替身**动作，仅由模型工具经控制队列触发；不暴露给页面 JS 桥。
+   */
+  private fun handleAppLaunch(args: JSONObject): JSONObject {
+    val pkg = args.optString("pkg", "")
+    if (!AppLaunchPolicy.isValidPackage(pkg)) return error("包名不合法：$pkg")
+    return try {
+      val intent = packageManager.getLaunchIntentForPackage(pkg)
+        ?: return error("应用不可拉起：$pkg（未安装，或没有 LAUNCHER 入口）")
+      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+      startActivity(intent)
+      JSONObject().put("launched", pkg)
+    } catch (t: Throwable) {
+      error("拉起失败：$pkg（" + (t.message ?: t.javaClass.simpleName) + "）——可能被系统后台启动限制拦截")
+    }
   }
 
   private fun error(message: String): JSONObject = JSONObject().put("__error", message)
